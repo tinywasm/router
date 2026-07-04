@@ -15,6 +15,9 @@ type Context interface {
 	// Valores de ámbito de petición (middleware pasa datos al handler siguiente).
 	SetValue(key string, v any)
 	Value(key string) any
+	// Cookies isomórficas.
+	SetCookie(c Cookie)             // escribe una cookie en la respuesta
+	Cookie(name string) (Cookie, bool) // lee una cookie de la petición; ok=false si no está
 }
 
 // HandlerFunc es la unidad de despacho: recibe un Context y responde sobre él.
@@ -49,15 +52,17 @@ type Middleware func(HandlerFunc) HandlerFunc
 // Un implementador concreto (servidor nativo, runtime edge) satisface esta interfaz;
 // los módulos y los hosts solo la consumen.
 type Router interface {
-	Get(path string, h HandlerFunc)
-	Post(path string, h HandlerFunc)
-	Put(path string, h HandlerFunc)
-	Delete(path string, h HandlerFunc)
-	Options(path string, h HandlerFunc)
-	Handle(method, path string, h HandlerFunc)
-	Stream(path string, h StreamFunc)
-	Socket(path string, h SocketFunc)
+	Get(path string, h HandlerFunc) Route
+	Post(path string, h HandlerFunc) Route
+	Put(path string, h HandlerFunc) Route
+	Delete(path string, h HandlerFunc) Route
+	Options(path string, h HandlerFunc) Route
+	Handle(method, path string, h HandlerFunc) Route
+	Stream(path string, h StreamFunc) Route
+	Socket(path string, h SocketFunc) Route
 	Use(m ...Middleware)
+	// Routes enumera las rutas registradas y sus metadatos.
+	Routes() []RouteInfo
 }
 
 // APIModule es un módulo que expone una API de servidor.
