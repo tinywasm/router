@@ -18,6 +18,10 @@ type Context interface {
 	// Cookies isomórficas.
 	SetCookie(c Cookie)             // escribe una cookie en la respuesta
 	Cookie(name string) (Cookie, bool) // lee una cookie de la petición; ok=false si no está
+	// Identidad de ámbito de petición. Un middleware de autenticación registra
+	// quién es el llamador; los handlers y módulos montados la leen.
+	SetUserID(id string) // registra la identidad autenticada (id "" = anónimo)
+	UserID() string      // lee la identidad; "" si no hay sesión válida
 }
 
 // HandlerFunc es la unidad de despacho: recibe un Context y responde sobre él.

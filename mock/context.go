@@ -17,6 +17,7 @@ type Context struct {
 	headers  map[string]string
 	cookies  map[string]router.Cookie
 	values   map[string]any
+	userID   string
 }
 
 // ResponseBody devuelve el cuerpo de respuesta bufferizado.
@@ -91,6 +92,14 @@ func (c *Context) Cookie(name string) (router.Cookie, bool) {
 	}
 	cookie, ok := c.cookies[name]
 	return cookie, ok
+}
+
+func (c *Context) SetUserID(id string) {
+	c.userID = id
+}
+
+func (c *Context) UserID() string {
+	return c.userID
 }
 
 var _ router.Context = (*Context)(nil)
