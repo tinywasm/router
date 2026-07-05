@@ -22,11 +22,11 @@ func (m MyModule) MountAPI(r router.Router) {
 
 ## Contracts
 
-- **`Context`**: minimal I/O (read method/path/body, write headers/status) + cookies (SetCookie/Cookie)
+- **`Context`**: minimal I/O (read method/path/body, write headers/status) + cookies (SetCookie/Cookie) + identity (`SetUserID`/`UserID`)
 - **`Cookie`**: isomorphic HTTP cookie type with SameSite policy (SameSiteDefault/Lax/Strict/None)
 - **`HandlerFunc`**: `func(Context)` — the unit of dispatch
-- **`Route`**: registration token; supports Requires(resource, action) for RBAC metadata
-- **`RouteInfo`**: read-only view of a registered route with method, path, resource, and action
+- **`Route`**: registration token; supports `Requires(resource, action)` for RBAC and `Public()` for explicit public access
+- **`RouteInfo`**: read-only view of a registered route with method, path, resource, action, and public flag
 - **`Router`**: register routes (Get/Post/Put/Delete/Handle) returning Route + streaming (Stream/Socket) + middleware (Use) + Routes() for introspection
 - **`Streamer`**: Context + Flush() for SSE/streaming responses
 - **`Socket`**: bidirectional connection (WebSocket)

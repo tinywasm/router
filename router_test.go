@@ -11,6 +11,7 @@ import (
 type fakeContext struct {
 	values  map[string]any
 	cookies map[string]Cookie
+	userID  string
 }
 
 func (f *fakeContext) Method() string                      { return "GET" }
@@ -24,6 +25,8 @@ func (f *fakeContext) SetValue(key string, v any)          { if f.values == nil 
 func (f *fakeContext) Value(key string) any                { if f.values == nil { return nil }; return f.values[key] }
 func (f *fakeContext) SetCookie(c Cookie)                  { if f.cookies == nil { f.cookies = make(map[string]Cookie) }; f.cookies[c.Name] = c }
 func (f *fakeContext) Cookie(name string) (Cookie, bool)   { if f.cookies == nil { return Cookie{}, false }; c, ok := f.cookies[name]; return c, ok }
+func (f *fakeContext) SetUserID(id string)                 { f.userID = id }
+func (f *fakeContext) UserID() string                      { return f.userID }
 
 var _ Context = (*fakeContext)(nil)
 
@@ -121,6 +124,11 @@ func (r *fakeRoute) Requires(resource string, action string) Route {
 	return r
 }
 
+func (r *fakeRoute) Public() Route {
+	r.info.Public = true
+	return r
+}
+
 var _ Route = (*fakeRoute)(nil)
 
 // fakeModule prueba que APIModule embebe ModuleNaming sin tocar tipos de transporte.
@@ -201,6 +209,44 @@ func TestRouteMetadata(t *testing.T) {
 	if fakeRoute, ok := route.(*fakeRoute); ok {
 		if fakeRoute.info.Resource != "orders" || fakeRoute.info.Action != "write" {
 			t.Fatalf("Route metadata mismatch: got Resource=%q, Action=%q", fakeRoute.info.Resource, fakeRoute.info.Action)
+		}
+	}
+}
+
+// TestUserID verifica ida y vuelta de SetUserID/UserID.
+func TestUserID(t *testing.T) {
+	ctx := &fakeContext{}
+
+	// Por defecto vacío
+	if ctx.UserID() != "" {
+		t.Fatalf("UserID() should be empty by default, got %q", ctx.UserID())
+	}
+
+	// Setea un ID
+	ctx.SetUserID("u123")
+	if ctx.UserID() != "u123" {
+		t.Fatalf("UserID() mismatch: got %q, want %q", ctx.UserID(), "u123")
+	}
+
+	// Setea anónimo
+	ctx.SetUserID("")
+	if ctx.UserID() != "" {
+		t.Fatalf("UserID() should be empty after SetUserID(\"\")")
+	}
+}
+
+// TestPublicRoute verifica que Public() marca la ruta como pública.
+func TestPublicRoute(t *testing.T) {
+	r := &fakeRouter{}
+
+	// Registra una ruta pública
+	route := r.Get("/public", func(ctx Context) {})
+	route.Public()
+
+	// Verifica el marcador
+	if fakeRoute, ok := route.(*fakeRoute); ok {
+		if !fakeRoute.info.Public {
+			t.Fatalf("Route should be public")
 		}
 	}
 }

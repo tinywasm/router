@@ -13,4 +13,9 @@ func (r *Route) Requires(resource string, action string) router.Route {
 	return r
 }
 
+func (r *Route) Public() router.Route {
+	r.info.Public = true
+	return r
+}
+
 var _ router.Route = (*Route)(nil)
