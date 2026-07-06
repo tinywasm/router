@@ -1,6 +1,6 @@
 package router
 
-import "github.com/tinywasm/fmt"
+import "github.com/tinywasm/model"
 
 // Context es la abstracción mínima que ve un handler: petición → respuesta.
 // Idéntica firma en el objetivo nativo (!wasm) y en el objetivo edge/wasm.
@@ -75,6 +75,6 @@ type Router interface {
 // el módulo nunca importa net/http para describir su API. El transporte concreto
 // (subida binaria, otro protocolo montado como ruta) es decisión interna del módulo.
 type APIModule interface {
-	fmt.ModuleNaming // aporta ModelName() — identidad
+	model.ModuleNaming // aporta ModelName() — identidad
 	MountAPI(r Router)
 }

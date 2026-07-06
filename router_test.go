@@ -3,7 +3,7 @@ package router
 import (
 	"testing"
 
-	"github.com/tinywasm/fmt"
+	"github.com/tinywasm/model"
 )
 
 // fakeContext prueba que cualquier tipo implementando Context se escribe guiado
@@ -14,19 +14,40 @@ type fakeContext struct {
 	userID  string
 }
 
-func (f *fakeContext) Method() string                      { return "GET" }
-func (f *fakeContext) Path() string                        { return "/" }
-func (f *fakeContext) Body() []byte                        { return nil }
-func (f *fakeContext) GetHeader(key string) string         { return "" }
-func (f *fakeContext) SetHeader(key, value string)         {}
-func (f *fakeContext) WriteStatus(code int)                {}
-func (f *fakeContext) Write(b []byte) (int, error)         { return len(b), nil }
-func (f *fakeContext) SetValue(key string, v any)          { if f.values == nil { f.values = make(map[string]any) }; f.values[key] = v }
-func (f *fakeContext) Value(key string) any                { if f.values == nil { return nil }; return f.values[key] }
-func (f *fakeContext) SetCookie(c Cookie)                  { if f.cookies == nil { f.cookies = make(map[string]Cookie) }; f.cookies[c.Name] = c }
-func (f *fakeContext) Cookie(name string) (Cookie, bool)   { if f.cookies == nil { return Cookie{}, false }; c, ok := f.cookies[name]; return c, ok }
-func (f *fakeContext) SetUserID(id string)                 { f.userID = id }
-func (f *fakeContext) UserID() string                      { return f.userID }
+func (f *fakeContext) Method() string              { return "GET" }
+func (f *fakeContext) Path() string                { return "/" }
+func (f *fakeContext) Body() []byte                { return nil }
+func (f *fakeContext) GetHeader(key string) string { return "" }
+func (f *fakeContext) SetHeader(key, value string) {}
+func (f *fakeContext) WriteStatus(code int)        {}
+func (f *fakeContext) Write(b []byte) (int, error) { return len(b), nil }
+func (f *fakeContext) SetValue(key string, v any) {
+	if f.values == nil {
+		f.values = make(map[string]any)
+	}
+	f.values[key] = v
+}
+func (f *fakeContext) Value(key string) any {
+	if f.values == nil {
+		return nil
+	}
+	return f.values[key]
+}
+func (f *fakeContext) SetCookie(c Cookie) {
+	if f.cookies == nil {
+		f.cookies = make(map[string]Cookie)
+	}
+	f.cookies[c.Name] = c
+}
+func (f *fakeContext) Cookie(name string) (Cookie, bool) {
+	if f.cookies == nil {
+		return Cookie{}, false
+	}
+	c, ok := f.cookies[name]
+	return c, ok
+}
+func (f *fakeContext) SetUserID(id string) { f.userID = id }
+func (f *fakeContext) UserID() string      { return f.userID }
 
 var _ Context = (*fakeContext)(nil)
 
@@ -134,10 +155,10 @@ var _ Route = (*fakeRoute)(nil)
 // fakeModule prueba que APIModule embebe ModuleNaming sin tocar tipos de transporte.
 type fakeModule struct{ name string }
 
-func (f fakeModule) ModelName() string      { return f.name }
-func (f fakeModule) MountAPI(r Router)      {}
+func (f fakeModule) ModelName() string { return f.name }
+func (f fakeModule) MountAPI(r Router) {}
 
-var _ fmt.ModuleNaming = fakeModule{}
+var _ model.ModuleNaming = fakeModule{}
 var _ APIModule = fakeModule{}
 
 // TestRouterContracts verifica que los contratos se escriben tipados.
