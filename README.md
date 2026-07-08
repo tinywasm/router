@@ -20,6 +20,22 @@ func (m MyModule) MountAPI(r router.Router) {
 }
 ```
 
+## Caller — the call-side contract
+
+```go
+func (v *MyView) Refresh() {
+    v.Caller.Call("list_services", nil, func(res []byte, err error) {
+        if err != nil {
+            v.HandleError(err)
+            return
+        }
+        v.Update(res)
+    })
+}
+```
+
+Modules and views depend on `Caller` to invoke server operations without knowing the wire protocol or transport. Adapters live with each transport (e.g. `mcp.NewCaller` in `tinywasm/mcp` adapts a JSON-RPC client), while tests use a `mock.Caller`.
+
 ## Contracts
 
 - **`Context`**: minimal I/O (read method/path/body, write headers/status) + cookies (SetCookie/Cookie) + identity (`SetUserID`/`UserID`)
@@ -32,7 +48,8 @@ func (m MyModule) MountAPI(r router.Router) {
 - **`Socket`**: bidirectional connection (WebSocket)
 - **`Middleware`**: `func(HandlerFunc) HandlerFunc` — transversal logic (auth, logging)
 - **`APIModule`**: module + MountAPI(Router) — how modules publish APIs
-- **`mock`**: subpackage with canonical test doubles (Router, Context, Route) — no `net/http`, WASM-safe
+- **`Caller`**: call-side contract — how a client-side view invokes a named server operation
+- **`mock`**: subpackage with canonical test doubles (Router, Context, Route, Caller) — no `net/http`, WASM-safe
 
 ## Design
 
