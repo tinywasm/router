@@ -55,4 +55,4 @@ Modules and views depend on `Caller` to invoke server operations without knowing
 
 No `net/http` in the public API. Handlers never import Go's standard library HTTP types. All routing is self-describing via signatures — no runtime type assertions, no hidden machinery.
 
-See [docs/PLAN_EXECUTED.md](docs/PLAN_EXECUTED.md) for implementation details.
+
