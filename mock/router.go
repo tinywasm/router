@@ -3,11 +3,15 @@ package mock
 import "github.com/tinywasm/router"
 
 // Router graba las rutas registradas y permite dispararlas en un test.
+//
+// Guarda *Route, no RouteInfo: las anotaciones de permiso (Public/Requires) se
+// encadenan DESPUÉS de registrar la ruta, así que una copia por valor tomada en
+// el registro nunca las vería y el mock afirmaría que toda ruta es privada.
 type Router struct {
-	Registered []router.RouteInfo
+	registered []*Route
 	handlers   map[string]map[string]router.HandlerFunc // [method][path]handler
-	streams    map[string]map[string]router.StreamFunc   // [method][path]handler
-	sockets    map[string]map[string]router.SocketFunc   // [method][path]handler
+	streams    map[string]map[string]router.StreamFunc  // [method][path]handler
+	sockets    map[string]map[string]router.SocketFunc  // [method][path]handler
 }
 
 func (r *Router) ensureHandlers() {
@@ -28,7 +32,7 @@ func (r *Router) registerRoute(method, path string, resource, action string) *Ro
 			Action:   action,
 		},
 	}
-	r.Registered = append(r.Registered, route.info)
+	r.registered = append(r.registered, route)
 	return route
 }
 
@@ -116,8 +120,14 @@ func (r *Router) Use(m ...router.Middleware) {
 	// middleware is not recorded in this mock
 }
 
+// Routes proyecta las rutas registradas en el momento de la consulta, ya con sus
+// anotaciones de permiso aplicadas.
 func (r *Router) Routes() []router.RouteInfo {
-	return r.Registered
+	out := make([]router.RouteInfo, 0, len(r.registered))
+	for _, route := range r.registered {
+		out = append(out, route.info)
+	}
+	return out
 }
 
 // Invoke ejecuta el handler registrado para un método y ruta.
