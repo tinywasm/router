@@ -1,4 +1,4 @@
-# router
+# tinywasm/router
 
 <img src="docs/img/badges.svg">
 

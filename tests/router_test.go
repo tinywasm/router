@@ -1,16 +1,17 @@
-package router
+package router_test
 
 import (
 	"testing"
 
 	"github.com/tinywasm/model"
+	"github.com/tinywasm/router"
 )
 
 // fakeContext prueba que cualquier tipo implementando Context se escribe guiado
 // por la interfaz — sin fallbacks a `net/http`.
 type fakeContext struct {
 	values  map[string]any
-	cookies map[string]Cookie
+	cookies map[string]router.Cookie
 	userID  string
 }
 
@@ -33,15 +34,15 @@ func (f *fakeContext) Value(key string) any {
 	}
 	return f.values[key]
 }
-func (f *fakeContext) SetCookie(c Cookie) {
+func (f *fakeContext) SetCookie(c router.Cookie) {
 	if f.cookies == nil {
-		f.cookies = make(map[string]Cookie)
+		f.cookies = make(map[string]router.Cookie)
 	}
 	f.cookies[c.Name] = c
 }
-func (f *fakeContext) Cookie(name string) (Cookie, bool) {
+func (f *fakeContext) Cookie(name string) (router.Cookie, bool) {
 	if f.cookies == nil {
-		return Cookie{}, false
+		return router.Cookie{}, false
 	}
 	c, ok := f.cookies[name]
 	return c, ok
@@ -49,14 +50,14 @@ func (f *fakeContext) Cookie(name string) (Cookie, bool) {
 func (f *fakeContext) SetUserID(id string) { f.userID = id }
 func (f *fakeContext) UserID() string      { return f.userID }
 
-var _ Context = (*fakeContext)(nil)
+var _ router.Context = (*fakeContext)(nil)
 
 // fakeStreamer prueba que Streamer se escribe con Flush().
 type fakeStreamer struct{ *fakeContext }
 
 func (f *fakeStreamer) Flush() {}
 
-var _ Streamer = (*fakeStreamer)(nil)
+var _ router.Streamer = (*fakeStreamer)(nil)
 
 // fakeSocket prueba que Socket se escribe tipado.
 type fakeSocket struct{}
@@ -65,119 +66,119 @@ func (f *fakeSocket) Read() ([]byte, error) { return nil, nil }
 func (f *fakeSocket) Write(b []byte) error  { return nil }
 func (f *fakeSocket) Close() error          { return nil }
 
-var _ Socket = (*fakeSocket)(nil)
+var _ router.Socket = (*fakeSocket)(nil)
 
 // fakeRouter prueba que Router registra rutas tipadas con metadatos.
 type fakeRouter struct {
-	routes     map[string]HandlerFunc
-	registered []RouteInfo
+	routes     map[string]router.HandlerFunc
+	registered []router.RouteInfo
 }
 
-func (f *fakeRouter) registerRoute(method, path string) Route {
+func (f *fakeRouter) registerRoute(method, path string) router.Route {
 	if f.routes == nil {
-		f.routes = make(map[string]HandlerFunc)
+		f.routes = make(map[string]router.HandlerFunc)
 	}
-	r := &fakeRoute{info: RouteInfo{Method: method, Path: path}}
+	r := &fakeRoute{info: router.RouteInfo{Method: method, Path: path}}
 	return r
 }
 
-func (f *fakeRouter) Get(path string, h HandlerFunc) Route {
+func (f *fakeRouter) Get(path string, h router.HandlerFunc) router.Route {
 	r := f.registerRoute("GET", path)
 	f.routes[path] = h
 	return r
 }
 
-func (f *fakeRouter) Post(path string, h HandlerFunc) Route {
+func (f *fakeRouter) Post(path string, h router.HandlerFunc) router.Route {
 	r := f.registerRoute("POST", path)
 	f.routes[path] = h
 	return r
 }
 
-func (f *fakeRouter) Put(path string, h HandlerFunc) Route {
+func (f *fakeRouter) Put(path string, h router.HandlerFunc) router.Route {
 	r := f.registerRoute("PUT", path)
 	f.routes[path] = h
 	return r
 }
 
-func (f *fakeRouter) Delete(path string, h HandlerFunc) Route {
+func (f *fakeRouter) Delete(path string, h router.HandlerFunc) router.Route {
 	r := f.registerRoute("DELETE", path)
 	f.routes[path] = h
 	return r
 }
 
-func (f *fakeRouter) Options(path string, h HandlerFunc) Route {
+func (f *fakeRouter) Options(path string, h router.HandlerFunc) router.Route {
 	r := f.registerRoute("OPTIONS", path)
 	f.routes[path] = h
 	return r
 }
 
-func (f *fakeRouter) Handle(method, path string, h HandlerFunc) Route {
+func (f *fakeRouter) Handle(method, path string, h router.HandlerFunc) router.Route {
 	r := f.registerRoute(method, path)
 	f.routes[path] = h
 	return r
 }
 
-func (f *fakeRouter) Stream(path string, h StreamFunc) Route {
+func (f *fakeRouter) Stream(path string, h router.StreamFunc) router.Route {
 	return f.registerRoute("GET", path)
 }
 
-func (f *fakeRouter) Socket(path string, h SocketFunc) Route {
+func (f *fakeRouter) Socket(path string, h router.SocketFunc) router.Route {
 	return f.registerRoute("GET", path)
 }
 
-func (f *fakeRouter) Use(m ...Middleware) {
+func (f *fakeRouter) Use(m ...router.Middleware) {
 }
 
-func (f *fakeRouter) Routes() []RouteInfo {
+func (f *fakeRouter) Routes() []router.RouteInfo {
 	return f.registered
 }
 
-var _ Router = (*fakeRouter)(nil)
+var _ router.Router = (*fakeRouter)(nil)
 
 // fakeRoute implementa Route para grabar anotaciones de permiso.
 type fakeRoute struct {
-	info RouteInfo
+	info router.RouteInfo
 }
 
-func (r *fakeRoute) Requires(resource string, action string) Route {
+func (r *fakeRoute) Requires(resource string, action string) router.Route {
 	r.info.Resource = resource
 	r.info.Action = action
 	return r
 }
 
-func (r *fakeRoute) Public() Route {
+func (r *fakeRoute) Public() router.Route {
 	r.info.Public = true
 	return r
 }
 
-var _ Route = (*fakeRoute)(nil)
+var _ router.Route = (*fakeRoute)(nil)
 
 // fakeModule prueba que APIModule embebe ModuleNaming sin tocar tipos de transporte.
 type fakeModule struct{ name string }
 
 func (f fakeModule) ModelName() string { return f.name }
-func (f fakeModule) MountAPI(r Router) {}
+func (f fakeModule) MountAPI(r router.Router) {}
 
 var _ model.ModuleNaming = fakeModule{}
-var _ APIModule = fakeModule{}
+var _ router.APIModule = fakeModule{}
 
 // TestRouterContracts verifica que los contratos se escriben tipados.
 func TestRouterContracts(t *testing.T) {
-	var ctx Context = &fakeContext{}
+	var ctx router.Context = &fakeContext{}
 	if ctx.Path() != "/" {
 		t.Fatalf("Context.Path() failed")
 	}
 
-	var stream Streamer = &fakeStreamer{&fakeContext{}}
+	var stream router.Streamer = &fakeStreamer{&fakeContext{}}
 	stream.Flush()
 
-	var sock Socket = &fakeSocket{}
+	var sock router.Socket = &fakeSocket{}
 	sock.Close()
 
-	var r Router = &fakeRouter{}
-	r.Get("/api", func(ctx Context) {})
+	var r router.Router = &fakeRouter{}
+	r.Get("/api", func(ctx router.Context) {})
 
-	var m APIModule = fakeModule{name: "test"}
+	var m router.APIModule = fakeModule{name: "test"}
 	if m.ModelName() != "test" {
 		t.Fatalf("APIModule.ModelName() = %q, want %q", m.ModelName(), "test")
 	}
@@ -189,13 +190,13 @@ func TestCookies(t *testing.T) {
 	ctx := &fakeContext{}
 
 	// Escribe una cookie
-	cookie := Cookie{
+	cookie := router.Cookie{
 		Name:     "sid",
 		Value:    "xyz123",
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,
-		SameSite: SameSiteLax,
+		SameSite: router.SameSiteLax,
 	}
 	ctx.SetCookie(cookie)
 
@@ -223,7 +224,7 @@ func TestRouteMetadata(t *testing.T) {
 	r := &fakeRouter{}
 
 	// Registra una ruta con metadatos de permiso
-	route := r.Post("/orders", func(ctx Context) {})
+	route := r.Post("/orders", func(ctx router.Context) {})
 	route.Requires("orders", "write")
 
 	// Verifica que la ruta está anotada (en fakeRoute)
@@ -261,7 +262,7 @@ func TestPublicRoute(t *testing.T) {
 	r := &fakeRouter{}
 
 	// Registra una ruta pública
-	route := r.Get("/public", func(ctx Context) {})
+	route := r.Get("/public", func(ctx router.Context) {})
 	route.Public()
 
 	// Verifica el marcador
@@ -276,12 +277,12 @@ func TestPublicRoute(t *testing.T) {
 func TestSameSiteConstants(t *testing.T) {
 	tests := []struct {
 		name  string
-		value SameSite
+		value router.SameSite
 	}{
-		{"Default", SameSiteDefault},
-		{"Lax", SameSiteLax},
-		{"Strict", SameSiteStrict},
-		{"None", SameSiteNone},
+		{"Default", router.SameSiteDefault},
+		{"Lax", router.SameSiteLax},
+		{"Strict", router.SameSiteStrict},
+		{"None", router.SameSiteNone},
 	}
 
 	for _, tt := range tests {

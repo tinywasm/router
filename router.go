@@ -2,8 +2,14 @@ package router
 
 import "github.com/tinywasm/model"
 
-// Context es la abstracción mínima que ve un handler: petición → respuesta.
-// Idéntica firma en el objetivo nativo (!wasm) y en el objetivo edge/wasm.
+// Context is the minimal abstraction seen by a handler: request → response.
+// Same interface signature for both native (!wasm) and edge/wasm targets.
+//
+// Ownership: a Context belongs to ONE goroutine (the handler's);
+// implementations are not required to be safe for concurrent use
+// (same contract as http.ResponseWriter). To feed it from other
+// goroutines, send the data over a channel to the owning goroutine —
+// never share the Context itself.
 type Context interface {
 	Method() string
 	Path() string
@@ -12,49 +18,53 @@ type Context interface {
 	SetHeader(key, value string)
 	WriteStatus(code int)
 	Write(b []byte) (int, error)
-	// Valores de ámbito de petición (middleware pasa datos al handler siguiente).
+	// Request-scoped values (middleware passes data to the next handler).
 	SetValue(key string, v any)
 	Value(key string) any
-	// Cookies isomórficas.
-	SetCookie(c Cookie)             // escribe una cookie en la respuesta
-	Cookie(name string) (Cookie, bool) // lee una cookie de la petición; ok=false si no está
-	// Identidad de ámbito de petición. Un middleware de autenticación registra
-	// quién es el llamador; los handlers y módulos montados la leen.
-	SetUserID(id string) // registra la identidad autenticada (id "" = anónimo)
-	UserID() string      // lee la identidad; "" si no hay sesión válida
+	// Isomorphic cookies.
+	SetCookie(c Cookie)             // writes a cookie to the response
+	Cookie(name string) (Cookie, bool) // reads a cookie from the request; ok=false if not found
+	// Request-scoped identity. An auth middleware records the caller;
+	// handlers and mounted modules read it.
+	SetUserID(id string) // records the authenticated identity (id "" = anonymous)
+	UserID() string      // reads the identity; "" if no valid session
 }
 
-// HandlerFunc es la unidad de despacho: recibe un Context y responde sobre él.
+// HandlerFunc is the dispatch unit: receives a Context and responds to it.
 type HandlerFunc func(Context)
 
-// Streamer es un Context que además empuja lo escrito de inmediato.
-// Usada para respuestas incrementales (SSE, streaming).
+// Streamer is a Context that also flushes writes immediately.
+// Used for incremental responses (SSE, streaming).
+//
+// Ownership: same single-goroutine contract as Context. A push loop
+// (SSE hub, broker) must deliver messages to the handler's goroutine
+// via a channel; only that goroutine calls Write/Flush.
 type Streamer interface {
 	Context
-	Flush() // envía al cliente lo escrito hasta ahora, sin cerrar la respuesta
+	Flush() // sends to the client what has been written so far, without closing the response
 }
 
-// StreamFunc es un handler que recibe un Streamer tipado.
+// StreamFunc is a handler that receives a typed Streamer.
 type StreamFunc func(Streamer)
 
-// Socket es la conexión bidireccional ya upgradeada (WebSocket).
-// Abstracción isomórfica: no toca mecanismos de upgrade concretos.
+// Socket is the bidirectional upgraded connection (WebSocket).
+// Isomorphic abstraction: does not touch concrete upgrade mechanisms.
 type Socket interface {
 	Read() ([]byte, error)
 	Write(b []byte) error
 	Close() error
 }
 
-// SocketFunc es un handler que recibe un Socket tipado.
+// SocketFunc is a handler that receives a typed Socket.
 type SocketFunc func(Socket)
 
-// Middleware envuelve un handler para añadir lógica transversal (auth, logging).
-// Operar SOLO sobre Context — nunca sobre tipos concretos de transporte.
+// Middleware wraps a handler to add cross-cutting logic (auth, logging).
+// Operate ONLY on Context — never on concrete transport types.
 type Middleware func(HandlerFunc) HandlerFunc
 
-// Router es aquello sobre lo que un módulo registra sus rutas.
-// Un implementador concreto (servidor nativo, runtime edge) satisface esta interfaz;
-// los módulos y los hosts solo la consumen.
+// Router is what a module registers its routes on.
+// A concrete implementer (native server, edge runtime) satisfies this interface;
+// modules and hosts only consume it.
 type Router interface {
 	Get(path string, h HandlerFunc) Route
 	Post(path string, h HandlerFunc) Route
@@ -65,16 +75,16 @@ type Router interface {
 	Stream(path string, h StreamFunc) Route
 	Socket(path string, h SocketFunc) Route
 	Use(m ...Middleware)
-	// Routes enumera las rutas registradas y sus metadatos.
+	// Routes enumerates the registered routes and their metadata.
 	Routes() []RouteInfo
 }
 
-// APIModule es un módulo que expone una API de servidor.
-// Lo consume el punto de entrada del servidor (!wasm): le pasa el Router del host
-// y el módulo registra sus propias rutas/handlers. Como Router es isomórfico,
-// el módulo nunca importa net/http para describir su API. El transporte concreto
-// (subida binaria, otro protocolo montado como ruta) es decisión interna del módulo.
+// APIModule is a module that exposes a server API.
+// It is consumed by the server entry point (!wasm): which passes it the host's Router,
+// and the module registers its own routes/handlers. Since Router is isomorphic,
+// the module never imports net/http to describe its API. The concrete transport
+// (binary upload, another protocol mounted as a route) is the module's internal decision.
 type APIModule interface {
-	model.ModuleNaming // aporta ModelName() — identidad
+	model.ModuleNaming // provides ModelName() — identity
 	MountAPI(r Router)
 }

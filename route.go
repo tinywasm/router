@@ -1,23 +1,23 @@
 package router
 
-// Route describe una ruta ya registrada y permite anotarla. Lo devuelve cada método de
-// registro del Router. Las anotaciones son declarativas: el contrato no las aplica —
-// cada implementador concreto (serverd nativo, runtime edge) las hace cumplir.
+// Route describes a registered route and allows annotating it. It is returned by
+// each Router registration method. Annotations are declarative: the contract does
+// not enforce them — each concrete implementer (native server, edge runtime) enforces them.
 type Route interface {
-	// Requires ata un permiso RBAC a la ruta: el par (resource, action). action es string,
-	// coincidiendo con la fuente de verdad user.Permission.Action string. Legible y
-	// extensible: "write", "read", "orders:export" — no un byte críptico.
+	// Requires binds an RBAC permission to the route: the (resource, action) pair.
+	// action is a string, matching the source of truth user.Permission.Action string.
+	// Readable and extensible: "write", "read", "orders:export" — not a cryptic byte.
 	Requires(resource string, action string) Route
-	// Public marca la ruta como accesible sin identidad. La ausencia de este
-	// marcador (y de Requires) implica que la ruta es privada por defecto.
+	// Public marks the route as accessible without identity. The absence of this
+	// marker (and Requires) means the route is private by default.
 	Public() Route
 }
 
-// RouteInfo es la vista de solo lectura de una ruta registrada — para introspección.
+// RouteInfo is the read-only view of a registered route — for introspection.
 type RouteInfo struct {
-	Method   string
-	Path     string
-	Resource string // "" = ruta pública (sin RBAC)
-	Action   string
-	Public   bool // true = accesible sin identidad
+	Method   string // e.g. "GET", "POST"
+	Path     string // e.g. "/api/users", "/api/orders/:id"
+	Resource string // e.g. "users", "orders"; "" = public route (no RBAC)
+	Action   string // e.g. "read", "write", "orders:export"
+	Public   bool   // true = accessible without identity
 }

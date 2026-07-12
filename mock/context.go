@@ -2,17 +2,22 @@ package mock
 
 import (
 	"bytes"
+	"sync"
 
 	"github.com/tinywasm/router"
 )
 
-// Context bufferiza la respuesta y deja fijar la petición desde el test.
+// Context buffers the response and lets tests set the request fields.
+// Unlike the base router.Context contract (single-goroutine ownership),
+// this mock IS safe for concurrent use: its role is to let the test
+// goroutine observe (ResponseBody) while a handler goroutine writes.
 type Context struct {
 	InMethod string
 	InPath   string
 	InBody   []byte
 
 	Status   int
+	mu       sync.RWMutex
 	response bytes.Buffer
 	headers  map[string]string
 	cookies  map[string]router.Cookie
@@ -20,9 +25,15 @@ type Context struct {
 	userID   string
 }
 
-// ResponseBody devuelve el cuerpo de respuesta bufferizado.
+// ResponseBody devuelve una copia del cuerpo de respuesta bufferizado.
 func (c *Context) ResponseBody() []byte {
-	return c.response.Bytes()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	// Devuelve una copia para evitar races con escrituras posteriores.
+	src := c.response.Bytes()
+	dst := make([]byte, len(src))
+	copy(dst, src)
+	return dst
 }
 
 func (c *Context) Method() string {
@@ -44,6 +55,8 @@ func (c *Context) Body() []byte {
 }
 
 func (c *Context) GetHeader(key string) string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.headers == nil {
 		return ""
 	}
@@ -51,6 +64,8 @@ func (c *Context) GetHeader(key string) string {
 }
 
 func (c *Context) SetHeader(key, value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.headers == nil {
 		c.headers = make(map[string]string)
 	}
@@ -58,14 +73,20 @@ func (c *Context) SetHeader(key, value string) {
 }
 
 func (c *Context) WriteStatus(code int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.Status = code
 }
 
 func (c *Context) Write(b []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.response.Write(b)
 }
 
 func (c *Context) SetValue(key string, v any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.values == nil {
 		c.values = make(map[string]any)
 	}
@@ -73,6 +94,8 @@ func (c *Context) SetValue(key string, v any) {
 }
 
 func (c *Context) Value(key string) any {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.values == nil {
 		return nil
 	}
@@ -80,6 +103,8 @@ func (c *Context) Value(key string) any {
 }
 
 func (c *Context) SetCookie(cookie router.Cookie) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.cookies == nil {
 		c.cookies = make(map[string]router.Cookie)
 	}
@@ -87,6 +112,8 @@ func (c *Context) SetCookie(cookie router.Cookie) {
 }
 
 func (c *Context) Cookie(name string) (router.Cookie, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.cookies == nil {
 		return router.Cookie{}, false
 	}
@@ -95,10 +122,14 @@ func (c *Context) Cookie(name string) (router.Cookie, bool) {
 }
 
 func (c *Context) SetUserID(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.userID = id
 }
 
 func (c *Context) UserID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.userID
 }
 
