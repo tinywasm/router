@@ -88,6 +88,15 @@ func (f *fakeRouter) Get(path string, h router.HandlerFunc) router.Route {
 	return r
 }
 
+func (f *fakeRouter) PublicAsset(path string, h router.HandlerFunc) {
+	f.registerRoute("GET", path)
+	f.routes[path] = h
+}
+
+func (f *fakeRouter) PublicDir(prefix string, dir string) {
+	f.registerRoute("GET", prefix)
+}
+
 func (f *fakeRouter) Post(path string, h router.HandlerFunc) router.Route {
 	r := f.registerRoute("POST", path)
 	f.routes[path] = h

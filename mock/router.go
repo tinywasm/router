@@ -46,6 +46,25 @@ func (r *Router) Get(path string, h router.HandlerFunc) router.Route {
 	return route
 }
 
+// PublicAsset registra un archivo servido al navegador: público por construcción,
+// sin Route que devolver — no hay permiso que colgarle.
+func (r *Router) PublicAsset(path string, h router.HandlerFunc) {
+	route := r.registerRoute("GET", path, "", "")
+	route.info.Public = true
+	r.ensureHandlers()
+	if r.handlers["GET"] == nil {
+		r.handlers["GET"] = make(map[string]router.HandlerFunc)
+	}
+	r.handlers["GET"][path] = h
+}
+
+// PublicDir registra un directorio servido bajo un prefijo.
+func (r *Router) PublicDir(prefix string, dir string) {
+	route := r.registerRoute("GET", prefix, "", "")
+	route.info.Public = true
+	route.info.Dir = dir
+}
+
 func (r *Router) Post(path string, h router.HandlerFunc) router.Route {
 	route := r.registerRoute("POST", path, "", "")
 	r.ensureHandlers()

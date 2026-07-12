@@ -74,6 +74,21 @@ type Router interface {
 	Handle(method, path string, h HandlerFunc) Route
 	Stream(path string, h StreamFunc) Route
 	Socket(path string, h SocketFunc) Route
+
+	// PublicAsset registers ONE route serving ONE file to the browser: generated
+	// content such as index.html, the stylesheet, the JS bundle or the wasm binary.
+	//
+	// It is public by construction — a browser fetching an asset has no identity
+	// yet. It returns no Route: there is no permission to attach, so an asset can
+	// neither be left private by accident (a silent 403 on a blank page) nor be
+	// wrongly gated. Serving a file that DOES need permissions is a normal route:
+	// Get(path, h).Requires(resource, action) — which fails closed if forgotten.
+	PublicAsset(path string, h HandlerFunc)
+
+	// PublicDir serves a whole directory under a prefix (e.g. "web/public").
+	// Same contract as PublicAsset: public by construction, no Route to gate.
+	PublicDir(prefix string, dir string)
+
 	Use(m ...Middleware)
 	// Routes enumerates the registered routes and their metadata.
 	Routes() []RouteInfo

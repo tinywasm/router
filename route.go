@@ -20,4 +20,8 @@ type RouteInfo struct {
 	Resource string // e.g. "users", "orders"; "" = public route (no RBAC)
 	Action   string // e.g. "read", "write", "orders:export"
 	Public   bool   // true = accessible without identity
+	// Dir is the directory served by PublicDir; "" for every other route.
+	// It exists so a whole served directory is visible to introspection instead of
+	// being smuggled past the router by a file-server fallback.
+	Dir string
 }

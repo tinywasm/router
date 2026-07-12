@@ -58,6 +58,31 @@ defines the shape.
 
 ---
 
+## Access: closed by default, opening is typed
+
+Routes are **private by default**. A `Get`/`Post`/… that declares neither `Public()`
+nor `Requires()` denies a caller with no identity. Never weaken this.
+
+Opening is not a marker you must remember to add — it is a different method:
+
+| Intent | Write this | Why |
+|---|---|---|
+| Serve one generated file (index.html, css, bundle, wasm) | `r.PublicAsset(path, h)` | Public by construction. Returns no `Route`: nothing to gate, nothing to forget. |
+| Serve a directory (`web/public`) | `r.PublicDir(prefix, dir)` | Same. Also keeps the directory **visible** to `Routes()` instead of being served by a file-server fallback outside the router. |
+| Serve a file that needs permissions | `r.Get(path, h).Requires(res, action)` | A normal route. A PDF body changes nothing. |
+
+The asymmetry is deliberate. **Forgetting to open** used to be a silent failure — a
+403 on a blank page, which happened in three repos independently — so opening gets
+its own typed, `grep`-able method. **Forgetting to close** already fails safe (the
+route stays private), so it needs no new method.
+
+Never add `.Public()` to an asset route: if you are reaching for it, you want
+`PublicAsset`. An implementer that serves files outside the router (a `FileServer`
+fallback, a prefix rule in middleware) puts them beyond the permission gate and is a
+bug, not an optimization.
+
+---
+
 ## Testing
 
 ```bash
