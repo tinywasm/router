@@ -76,6 +76,22 @@ The asymmetry is deliberate. **Forgetting to open** used to be a silent failure 
 its own typed, `grep`-able method. **Forgetting to close** already fails safe (the
 route stays private), so it needs no new method.
 
+## Access is ONE declaration, not a combination of flags
+
+`RouteInfo.Access` (`model.Access`) has three states, and the **zero value is
+`AccessGuarded`**: identity AND a permission on a `Resource`.
+
+| State | Set with | Means |
+|---|---|---|
+| `AccessGuarded` (zero) | `.Requires(res, action)` | identity + permission. **A route that annotates nothing lands here and is unreachable** until it declares a resource — an enforcer must reject it loudly at startup. |
+| `AccessAuthenticated` | `.Authenticated()` | any identity, no resource check. For operations on the caller themselves. |
+| `AccessPublic` | `.Public()`, `PublicAsset`, `PublicDir` | no identity at all. |
+
+This replaced a `Public bool` sitting next to an empty-or-not `Resource`. That encoding made
+an illegal state writable — `.Public().Requires(...)` — where the gate kept `Public` and
+**silently dropped the permission check**: a route that looked protected and was not. A
+declared value cannot contradict itself.
+
 ## The RBAC vocabulary is typed, and this library never declares it
 
 `Requires` takes `model.Resource` and `model.Action`. Both used to be bare strings, so

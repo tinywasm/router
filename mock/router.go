@@ -1,6 +1,9 @@
 package mock
 
-import "github.com/tinywasm/router"
+import (
+	"github.com/tinywasm/model"
+	"github.com/tinywasm/router"
+)
 
 // Router graba las rutas registradas y permite dispararlas en un test.
 //
@@ -50,7 +53,7 @@ func (r *Router) Get(path string, h router.HandlerFunc) router.Route {
 // sin Route que devolver — no hay permiso que colgarle.
 func (r *Router) PublicAsset(path string, h router.HandlerFunc) {
 	route := r.registerRoute("GET", path)
-	route.info.Public = true
+	route.info.Access = model.AccessPublic
 	r.ensureHandlers()
 	if r.handlers["GET"] == nil {
 		r.handlers["GET"] = make(map[string]router.HandlerFunc)
@@ -61,7 +64,7 @@ func (r *Router) PublicAsset(path string, h router.HandlerFunc) {
 // PublicDir registra un directorio servido bajo un prefijo.
 func (r *Router) PublicDir(prefix string, dir string) {
 	route := r.registerRoute("GET", prefix)
-	route.info.Public = true
+	route.info.Access = model.AccessPublic
 	route.info.Dir = dir
 }
 

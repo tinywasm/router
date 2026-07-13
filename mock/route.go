@@ -11,13 +11,19 @@ type Route struct {
 }
 
 func (r *Route) Requires(resource model.Resource, action model.Action) router.Route {
+	r.info.Access = model.AccessGuarded
 	r.info.Resource = resource
 	r.info.Action = action
 	return r
 }
 
+func (r *Route) Authenticated() router.Route {
+	r.info.Access = model.AccessAuthenticated
+	return r
+}
+
 func (r *Route) Public() router.Route {
-	r.info.Public = true
+	r.info.Access = model.AccessPublic
 	return r
 }
 

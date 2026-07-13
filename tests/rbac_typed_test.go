@@ -31,8 +31,29 @@ func TestRouteRBACIsTyped(t *testing.T) {
 	if route.Action != model.Update {
 		t.Errorf("Action = %d; se esperaba model.Update", route.Action)
 	}
-	if route.Public {
+	if route.IsPublic() {
 		t.Error("una ruta con Requires no puede ser pública")
+	}
+}
+
+// Los tres estados de acceso son UNA declaración, no una combinación de banderas.
+//
+// Antes se codificaban por ausencia: `Public bool` junto a un `Resource` vacío o no. Eso
+// hacía escribible un estado ilegal —`.Public().Requires(...)`— donde la verja se quedaba
+// con `Public` y **descartaba el permiso en silencio**: una ruta que parecía protegida y no
+// lo estaba. Un valor declarado no puede contradecirse a sí mismo.
+func TestAccessIsOneDeclaration(t *testing.T) {
+	r := &mock.Router{}
+
+	r.Get("/assets", func(ctx router.Context) {}).Public()
+	r.Get("/me", func(ctx router.Context) {}).Authenticated()
+	r.Get("/orders", func(ctx router.Context) {}).Requires("orders", model.Read)
+
+	want := []model.Access{model.AccessPublic, model.AccessAuthenticated, model.AccessGuarded}
+	for i, route := range r.Routes() {
+		if route.Access != want[i] {
+			t.Errorf("%s: Access = %d; se esperaba %d", route.Path, route.Access, want[i])
+		}
 	}
 }
 
@@ -43,7 +64,12 @@ func TestUnannotatedRouteStaysPrivate(t *testing.T) {
 	r.Get("/api/orders", func(ctx router.Context) {})
 
 	route := r.Routes()[0]
-	if route.Public {
+	// El zero value es AccessGuarded: exige identidad Y permiso. Algo que no declara nada
+	// queda inalcanzable — no abierto a cualquiera que resulte estar logueado.
+	if route.Access != model.AccessGuarded {
+		t.Errorf("Access = %d; el default debe ser AccessGuarded", route.Access)
+	}
+	if route.IsPublic() {
 		t.Error("un Get sin anotar NO puede ser público: el default es negar")
 	}
 	if route.Resource != "" {

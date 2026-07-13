@@ -150,13 +150,19 @@ type fakeRoute struct {
 }
 
 func (r *fakeRoute) Requires(resource model.Resource, action model.Action) router.Route {
+	r.info.Access = model.AccessGuarded
 	r.info.Resource = resource
 	r.info.Action = action
 	return r
 }
 
+func (r *fakeRoute) Authenticated() router.Route {
+	r.info.Access = model.AccessAuthenticated
+	return r
+}
+
 func (r *fakeRoute) Public() router.Route {
-	r.info.Public = true
+	r.info.Access = model.AccessPublic
 	return r
 }
 
@@ -277,7 +283,7 @@ func TestPublicRoute(t *testing.T) {
 
 	// Verifica el marcador
 	if fakeRoute, ok := route.(*fakeRoute); ok {
-		if !fakeRoute.info.Public {
+		if !fakeRoute.info.IsPublic() {
 			t.Fatalf("Route should be public")
 		}
 	}

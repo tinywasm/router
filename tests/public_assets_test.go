@@ -21,7 +21,7 @@ func TestPublicAssetIsPublicByConstruction(t *testing.T) {
 		t.Fatalf("registradas %d rutas, se esperaban 2", len(routes))
 	}
 	for _, route := range routes {
-		if !route.Public {
+		if !route.IsPublic() {
 			t.Errorf("%q no es pública: el navegador recibiría 403 y la página saldría en blanco", route.Path)
 		}
 		if route.Resource != "" {
@@ -39,7 +39,7 @@ func TestPublicDirIsPublicAndVisible(t *testing.T) {
 	if len(routes) != 1 {
 		t.Fatalf("registradas %d rutas, se esperaba 1", len(routes))
 	}
-	if !routes[0].Public {
+	if !routes[0].IsPublic() {
 		t.Error("el directorio servido debe ser público")
 	}
 	// Que el directorio sea visible en la introspección es el punto: antes se servía
@@ -56,7 +56,7 @@ func TestGetIsPrivateByDefault(t *testing.T) {
 	r.Get("/api/orders", func(ctx router.Context) {})
 
 	route := r.Routes()[0]
-	if route.Public {
+	if route.IsPublic() {
 		t.Error("un Get sin anotar NO puede ser público: el default es negar")
 	}
 	if route.Resource != "" {
@@ -72,7 +72,7 @@ func TestGatedFileIsJustARouteWithRequires(t *testing.T) {
 	r.Get("/invoice/:id", func(ctx router.Context) {}).Requires("invoices", model.Read)
 
 	route := r.Routes()[0]
-	if route.Public {
+	if route.IsPublic() {
 		t.Error("una ruta con Requires no puede ser pública")
 	}
 	if route.Resource != "invoices" || route.Action != model.Read {
