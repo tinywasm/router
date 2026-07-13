@@ -1,13 +1,16 @@
 package mock
 
-import "github.com/tinywasm/router"
+import (
+	"github.com/tinywasm/model"
+	"github.com/tinywasm/router"
+)
 
 // Route implementa router.Route para el mock, grabando las anotaciones de permiso.
 type Route struct {
 	info router.RouteInfo
 }
 
-func (r *Route) Requires(resource string, action string) router.Route {
+func (r *Route) Requires(resource model.Resource, action model.Action) router.Route {
 	r.info.Resource = resource
 	r.info.Action = action
 	return r

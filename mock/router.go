@@ -22,14 +22,14 @@ func (r *Router) ensureHandlers() {
 	}
 }
 
-func (r *Router) registerRoute(method, path string, resource, action string) *Route {
+// registerRoute crea la ruta SIN permisos: el recurso y la acción los pone Requires()
+// después, encadenado. Pasarlos aquí eran dos parámetros siempre vacíos.
+func (r *Router) registerRoute(method, path string) *Route {
 	r.ensureHandlers()
 	route := &Route{
 		info: router.RouteInfo{
-			Method:   method,
-			Path:     path,
-			Resource: resource,
-			Action:   action,
+			Method: method,
+			Path:   path,
 		},
 	}
 	r.registered = append(r.registered, route)
@@ -37,7 +37,7 @@ func (r *Router) registerRoute(method, path string, resource, action string) *Ro
 }
 
 func (r *Router) Get(path string, h router.HandlerFunc) router.Route {
-	route := r.registerRoute("GET", path, "", "")
+	route := r.registerRoute("GET", path)
 	r.ensureHandlers()
 	if r.handlers["GET"] == nil {
 		r.handlers["GET"] = make(map[string]router.HandlerFunc)
@@ -49,7 +49,7 @@ func (r *Router) Get(path string, h router.HandlerFunc) router.Route {
 // PublicAsset registra un archivo servido al navegador: público por construcción,
 // sin Route que devolver — no hay permiso que colgarle.
 func (r *Router) PublicAsset(path string, h router.HandlerFunc) {
-	route := r.registerRoute("GET", path, "", "")
+	route := r.registerRoute("GET", path)
 	route.info.Public = true
 	r.ensureHandlers()
 	if r.handlers["GET"] == nil {
@@ -60,13 +60,13 @@ func (r *Router) PublicAsset(path string, h router.HandlerFunc) {
 
 // PublicDir registra un directorio servido bajo un prefijo.
 func (r *Router) PublicDir(prefix string, dir string) {
-	route := r.registerRoute("GET", prefix, "", "")
+	route := r.registerRoute("GET", prefix)
 	route.info.Public = true
 	route.info.Dir = dir
 }
 
 func (r *Router) Post(path string, h router.HandlerFunc) router.Route {
-	route := r.registerRoute("POST", path, "", "")
+	route := r.registerRoute("POST", path)
 	r.ensureHandlers()
 	if r.handlers["POST"] == nil {
 		r.handlers["POST"] = make(map[string]router.HandlerFunc)
@@ -76,7 +76,7 @@ func (r *Router) Post(path string, h router.HandlerFunc) router.Route {
 }
 
 func (r *Router) Put(path string, h router.HandlerFunc) router.Route {
-	route := r.registerRoute("PUT", path, "", "")
+	route := r.registerRoute("PUT", path)
 	r.ensureHandlers()
 	if r.handlers["PUT"] == nil {
 		r.handlers["PUT"] = make(map[string]router.HandlerFunc)
@@ -86,7 +86,7 @@ func (r *Router) Put(path string, h router.HandlerFunc) router.Route {
 }
 
 func (r *Router) Delete(path string, h router.HandlerFunc) router.Route {
-	route := r.registerRoute("DELETE", path, "", "")
+	route := r.registerRoute("DELETE", path)
 	r.ensureHandlers()
 	if r.handlers["DELETE"] == nil {
 		r.handlers["DELETE"] = make(map[string]router.HandlerFunc)
@@ -96,7 +96,7 @@ func (r *Router) Delete(path string, h router.HandlerFunc) router.Route {
 }
 
 func (r *Router) Options(path string, h router.HandlerFunc) router.Route {
-	route := r.registerRoute("OPTIONS", path, "", "")
+	route := r.registerRoute("OPTIONS", path)
 	r.ensureHandlers()
 	if r.handlers["OPTIONS"] == nil {
 		r.handlers["OPTIONS"] = make(map[string]router.HandlerFunc)
@@ -106,7 +106,7 @@ func (r *Router) Options(path string, h router.HandlerFunc) router.Route {
 }
 
 func (r *Router) Handle(method, path string, h router.HandlerFunc) router.Route {
-	route := r.registerRoute(method, path, "", "")
+	route := r.registerRoute(method, path)
 	r.ensureHandlers()
 	if r.handlers[method] == nil {
 		r.handlers[method] = make(map[string]router.HandlerFunc)
@@ -116,7 +116,7 @@ func (r *Router) Handle(method, path string, h router.HandlerFunc) router.Route 
 }
 
 func (r *Router) Stream(path string, h router.StreamFunc) router.Route {
-	route := r.registerRoute("GET", path, "", "")
+	route := r.registerRoute("GET", path)
 	r.ensureHandlers()
 	if r.streams["GET"] == nil {
 		r.streams["GET"] = make(map[string]router.StreamFunc)
@@ -126,7 +126,7 @@ func (r *Router) Stream(path string, h router.StreamFunc) router.Route {
 }
 
 func (r *Router) Socket(path string, h router.SocketFunc) router.Route {
-	route := r.registerRoute("GET", path, "", "")
+	route := r.registerRoute("GET", path)
 	r.ensureHandlers()
 	if r.sockets["GET"] == nil {
 		r.sockets["GET"] = make(map[string]router.SocketFunc)

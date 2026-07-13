@@ -76,6 +76,24 @@ The asymmetry is deliberate. **Forgetting to open** used to be a silent failure 
 its own typed, `grep`-able method. **Forgetting to close** already fails safe (the
 route stays private), so it needs no new method.
 
+## The RBAC vocabulary is typed, and this library never declares it
+
+`Requires` takes `model.Resource` and `model.Action`. Both used to be bare strings, so
+swapping them compiled — and the failure was not an error but a **silent denial** at
+runtime, in the one place where silence is unacceptable.
+
+- **Resources are open**: the app declares its own (`"service_catalog"`). `router` only
+  *types* the vocabulary — a `router.ResourceUsers` constant here would be the very bug
+  this closes. The vocabulary belongs to the consumer.
+- **Actions are a closed CRUD set** (`model.Create/Read/Update/Delete`), a bit mask.
+  Persistence has four verbs and no tool in this ecosystem ever needed a fifth; a
+  free-form verb bought nothing and let `"raed"` compile. A domain verb like `approve`
+  is **not** a fifth action — it is another *resource*.
+- The zero value of `Action` is `0`: **no action**, not "all". Nothing is granted by
+  omission.
+
+Never convert to `string` to sidestep the type.
+
 Never add `.Public()` to an asset route: if you are reaching for it, you want
 `PublicAsset`. An implementer that serves files outside the router (a `FileServer`
 fallback, a prefix rule in middleware) puts them beyond the permission gate and is a

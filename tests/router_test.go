@@ -149,7 +149,7 @@ type fakeRoute struct {
 	info router.RouteInfo
 }
 
-func (r *fakeRoute) Requires(resource string, action string) router.Route {
+func (r *fakeRoute) Requires(resource model.Resource, action model.Action) router.Route {
 	r.info.Resource = resource
 	r.info.Action = action
 	return r
@@ -234,12 +234,13 @@ func TestRouteMetadata(t *testing.T) {
 
 	// Registra una ruta con metadatos de permiso
 	route := r.Post("/orders", func(ctx router.Context) {})
-	route.Requires("orders", "write")
+	// "write" no existe: los verbos son CRUD. Antes esto compilaba y denegaba en silencio.
+	route.Requires("orders", model.Update)
 
 	// Verifica que la ruta está anotada (en fakeRoute)
 	if fakeRoute, ok := route.(*fakeRoute); ok {
-		if fakeRoute.info.Resource != "orders" || fakeRoute.info.Action != "write" {
-			t.Fatalf("Route metadata mismatch: got Resource=%q, Action=%q", fakeRoute.info.Resource, fakeRoute.info.Action)
+		if fakeRoute.info.Resource != "orders" || fakeRoute.info.Action != model.Update {
+			t.Fatalf("Route metadata mismatch: got Resource=%q, Action=%d", fakeRoute.info.Resource, fakeRoute.info.Action)
 		}
 	}
 }

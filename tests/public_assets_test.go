@@ -3,6 +3,7 @@ package router_test
 import (
 	"testing"
 
+	"github.com/tinywasm/model"
 	"github.com/tinywasm/router"
 	"github.com/tinywasm/router/mock"
 )
@@ -68,13 +69,13 @@ func TestGetIsPrivateByDefault(t *testing.T) {
 func TestGatedFileIsJustARouteWithRequires(t *testing.T) {
 	r := &mock.Router{}
 
-	r.Get("/invoice/:id", func(ctx router.Context) {}).Requires("invoices", "read")
+	r.Get("/invoice/:id", func(ctx router.Context) {}).Requires("invoices", model.Read)
 
 	route := r.Routes()[0]
 	if route.Public {
 		t.Error("una ruta con Requires no puede ser pública")
 	}
-	if route.Resource != "invoices" || route.Action != "read" {
+	if route.Resource != "invoices" || route.Action != model.Read {
 		t.Errorf("RBAC = (%q,%q); se esperaba (invoices,read)", route.Resource, route.Action)
 	}
 }
