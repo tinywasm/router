@@ -1,21 +1,48 @@
 package mock
 
 import (
+	"github.com/tinywasm/fmt"
 	"github.com/tinywasm/model"
 	"github.com/tinywasm/router"
 )
 
-// Router graba las rutas registradas y permite dispararlas en un test.
+// Config declares WHO the caller is and WHAT they may do — the same two seams the real
+// implementations expose (server/httpd, goflare/edge). The zero value is legal and means
+// "no authentication, no authorizer": public routes work, and every guarded route denies.
+type Config struct {
+	// Authn establishes identity. It runs BEFORE the access gate: a gate that runs first
+	// can never be satisfied, and every guarded route becomes a permanent 403.
+	Authn router.Middleware
+
+	// Authorize answers whether an identity holds a permission. nil DENIES.
+	Authorize model.Authorizer
+}
+
+// Router is an in-memory implementation of router.Router for tests.
+//
+// It is NOT a recorder. It enforces the same contract the deployed implementations do —
+// method routing, closed-by-default access, identity before the gate, middleware behind it
+// — and it proves that by passing router/conformance, exactly like they must.
+//
+// It used to be a recorder: Invoke called the handler directly and Use was discarded. That
+// made it a fake that could not fail, so every consumer testing against it was testing a
+// fantasy — a guarded route "worked" in their tests and answered 403 in production. That is
+// not a hypothetical: it is how goflare shipped an unusable file API with a green suite.
 //
 // Guarda *Route, no RouteInfo: las anotaciones de permiso (Public/Requires) se
 // encadenan DESPUÉS de registrar la ruta, así que una copia por valor tomada en
 // el registro nunca las vería y el mock afirmaría que toda ruta es privada.
 type Router struct {
-	registered []*Route
-	handlers   map[string]map[string]router.HandlerFunc // [method][path]handler
-	streams    map[string]map[string]router.StreamFunc  // [method][path]handler
-	sockets    map[string]map[string]router.SocketFunc  // [method][path]handler
+	cfg         Config
+	middlewares []router.Middleware
+	registered  []*Route
+	handlers    map[string]map[string]router.HandlerFunc // [method][path]handler
+	streams     map[string]map[string]router.StreamFunc  // [method][path]handler
+	sockets     map[string]map[string]router.SocketFunc  // [method][path]handler
 }
+
+// Configure installs the identity and authorization seams. Call it before dispatching.
+func (r *Router) Configure(cfg Config) { r.cfg = cfg }
 
 func (r *Router) ensureHandlers() {
 	if r.handlers == nil {
@@ -138,8 +165,10 @@ func (r *Router) Socket(path string, h router.SocketFunc) router.Route {
 	return route
 }
 
+// Use registers middleware. It runs BEHIND the access gate: a rejected request must not
+// execute business logic.
 func (r *Router) Use(m ...router.Middleware) {
-	// middleware is not recorded in this mock
+	r.middlewares = append(r.middlewares, m...)
 }
 
 // Routes proyecta las rutas registradas en el momento de la consulta, ya con sus
@@ -152,15 +181,108 @@ func (r *Router) Routes() []router.RouteInfo {
 	return out
 }
 
-// Invoke ejecuta el handler registrado para un método y ruta.
+// Invoke drives one request through the FULL pipeline: identity, access gate, middleware,
+// handler — the same order a deployed implementation uses.
+//
+// It used to call the handler directly, skipping the gate. That is why it is worth saying
+// out loud: a fake that cannot reject is not testing your access control, it is hiding it.
 func (r *Router) Invoke(method, path string, ctx router.Context) {
+	gate := func(c router.Context) { r.gateAndServe(method, path, c) }
+
+	// Identity FIRST. The gate decides with what Authn established; run it the other way
+	// round and no caller can ever be authorized.
+	if r.cfg.Authn != nil {
+		gate = r.cfg.Authn(gate)
+	}
+	gate(ctx)
+}
+
+// gateAndServe matches the route, enforces its access, and only then runs the middleware
+// chain and the handler.
+func (r *Router) gateAndServe(method, path string, ctx router.Context) {
 	r.ensureHandlers()
-	if handlers, ok := r.handlers[method]; ok {
-		if h, ok := handlers[path]; ok {
-			h(ctx)
-			return
+
+	route, h, status := r.match(method, path)
+	if route == nil {
+		ctx.WriteStatus(status) // 404: no path matched — 405: the path exists, the method does not
+		return
+	}
+
+	if !r.allows(route.info, ctx.UserID()) {
+		ctx.WriteStatus(403)
+		return
+	}
+
+	// Middleware wraps the handler and runs BEHIND the gate: a 403 executes none of it.
+	// Applied in reverse so the first registered is the outermost.
+	for i := len(r.middlewares) - 1; i >= 0; i-- {
+		h = r.middlewares[i](h)
+	}
+	h(ctx)
+}
+
+// match finds the route for a method+path. A route registered with an empty method matches
+// any method — the contract allows it, so the mock must too.
+func (r *Router) match(method, path string) (*Route, router.HandlerFunc, int) {
+	pathExists := false
+	for _, route := range r.registered {
+		if route.info.Path != path {
+			continue
+		}
+		pathExists = true
+		if route.info.Method != "" && route.info.Method != method {
+			continue
+		}
+		if handlers, ok := r.handlers[route.info.Method]; ok {
+			if h, ok := handlers[path]; ok {
+				return route, h, 200
+			}
 		}
 	}
+	if pathExists {
+		return nil, nil, 405
+	}
+	return nil, nil, 404
+}
+
+// allows is the access gate. The zero value of Access is AccessGuarded: a route that
+// declares nothing is unreachable, never accidentally open.
+func (r *Router) allows(info router.RouteInfo, userID string) bool {
+	switch info.Access {
+	case model.AccessPublic:
+		return true
+	case model.AccessAuthenticated:
+		return userID != ""
+	default: // model.AccessGuarded — the zero value
+		if userID == "" {
+			return false
+		}
+		// model.Allowed denies when the authorizer is nil: the absence of an answer is
+		// not permission.
+		return model.Allowed(r.cfg.Authorize, userID, info.Resource, info.Action)
+	}
+}
+
+// Verify reports the contradictions an implementation must refuse to start with. Both deny
+// every caller forever, on a route that looks protected — and a silent 403 in production is
+// the worst possible way to find that out.
+func (r *Router) Verify() error {
+	for _, route := range r.registered {
+		if route.info.Access != model.AccessGuarded {
+			continue
+		}
+		// A route that annotated nothing: AccessGuarded is the zero value, so this is a
+		// declaration somebody forgot, not one they made.
+		if route.info.Resource == "" {
+			return fmt.Err("route", route.info.Method, route.info.Path,
+				"is guarded but declares no resource: it is unreachable")
+		}
+		if r.cfg.Authorize == nil {
+			return fmt.Err("route", route.info.Method, route.info.Path, "requires resource",
+				string(route.info.Resource), "but no Authorize is configured: it would deny every caller")
+		}
+	}
+	return nil
 }
 
 var _ router.Router = (*Router)(nil)
