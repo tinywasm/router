@@ -47,3 +47,27 @@ type RouteInfo struct {
 
 // IsPublic reports whether the route is reachable with no identity.
 func (r RouteInfo) IsPublic() bool { return r.Access == model.AccessPublic }
+
+// EncodeFields makes RouteInfo a model.Encodable, so it is serialized by tinywasm/json
+// through this DECLARED shape instead of by reflection over its Go fields.
+//
+// Reflection got it actively wrong, and wrong in the worst direction. `Access` and
+// `Action` are numeric types, so a reflection-based encoder emitted them as bare numbers:
+// the ZERO value of Access is AccessGuarded, so the MOST protected route in the server
+// reported itself as `"Access":0` — which any human or agent reading the routes endpoint
+// takes for "nothing declared", the exact opposite of the truth. `"Action":6` was equally
+// unreadable. An endpoint whose whole job is to expose the security posture of a server
+// must not invert it.
+//
+// Here the shape is stated, not guessed: the enums travel as the words they already know
+// how to render, and `Dir` — an internal detail of PublicDir — stays out of the wire.
+func (r RouteInfo) EncodeFields(w model.FieldWriter) {
+	w.String("method", r.Method)
+	w.String("path", r.Path)
+	w.String("resource", string(r.Resource))
+	w.String("action", r.Action.String()) // "ru", never 6
+	w.String("access", r.Access.String()) // "guarded", never 0
+}
+
+// IsNil satisfies model.Encodable; a RouteInfo is a value and never nil.
+func (r RouteInfo) IsNil() bool { return false }
