@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"sync"
 
+	"github.com/tinywasm/json"
+	"github.com/tinywasm/model"
 	"github.com/tinywasm/router"
 )
 
@@ -131,6 +133,23 @@ func (c *Context) UserID() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.userID
+}
+
+// Decode reads the request body as JSON into a typed destination. The mock backs Decode
+// with a real codec (tinywasm/json) rather than a fake, so a test proves the same
+// round-trip a deployed transport performs.
+func (c *Context) Decode(into model.Decodable) error {
+	return json.Decode(c.Body(), into)
+}
+
+// Encode writes v as the JSON response body, through the same real codec as Decode.
+func (c *Context) Encode(v model.Encodable) error {
+	var out []byte
+	if err := json.Encode(v, &out); err != nil {
+		return err
+	}
+	_, err := c.Write(out)
+	return err
 }
 
 var _ router.Context = (*Context)(nil)

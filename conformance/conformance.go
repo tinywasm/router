@@ -70,6 +70,44 @@ type Response struct {
 	Body   []byte
 }
 
+// echoPayload is the minimal model.Decodable+model.Encodable fixture used to prove
+// Context.Decode/Encode round-trip through the transport's real codec, instead of the
+// suite hand-parsing bytes — that would test the suite's parser, not the implementation's.
+type echoPayload struct{ Value string }
+
+func (e *echoPayload) IsNil() bool                      { return e == nil }
+func (e *echoPayload) Schema() []model.Field            { return nil } // fixture: no validation exercised here
+func (e *echoPayload) Pointers() []any                  { return []any{&e.Value} }
+func (e *echoPayload) EncodeFields(w model.FieldWriter) { w.String("value", e.Value) }
+func (e *echoPayload) DecodeFields(r model.FieldReader) {
+	if v, ok := r.String("value"); ok {
+		e.Value = v
+	}
+}
+
+var _ model.Fielder = (*echoPayload)(nil)
+
+// echoPayloadJSON is the wire form of echoPayload — Context is byte-oriented (Body/Write),
+// and every deployed transport (httpd, edge) carries JSON on that wire today.
+const echoPayloadJSON = `{"value":"conformance"}`
+
+// extractEchoValue reads the "value" string back out of an echoPayloadJSON-shaped response.
+// Hand-written, not a codec import: conformance stays codec-agnostic in production code, and
+// this parses exactly the one fixed shape this fixture ever produces.
+func extractEchoValue(body []byte) string {
+	const prefix = `{"value":"`
+	s := string(body)
+	if len(s) <= len(prefix)+1 || s[:len(prefix)] != prefix {
+		return ""
+	}
+	rest := s[len(prefix):]
+	end := 0
+	for end < len(rest) && rest[end] != '"' {
+		end++
+	}
+	return rest[:end]
+}
+
 // ServeFunc drives ONE request through the Router under test and reports what came back.
 //
 // It must go through the implementation's REAL pipeline — identity, access gate,
@@ -93,6 +131,15 @@ type Factory struct {
 	// Optional. An implementation that cannot fail at startup leaves it nil, and the
 	// contradiction case skips with a loud reason instead of passing quietly.
 	Verify func(r router.Router) error
+
+	// ServeOp drives ONE request through a route registered via Router.Op(name, h) — the
+	// provider-side counterpart of router.Caller.Call(name, args, cb). It receives the SAME
+	// Router New built, so registration (by the clause) and invocation (by this func) share
+	// one instance; name is the op name the clause registered.
+	//
+	// Optional. An implementation that does not yet implement Op leaves this nil, and the
+	// Op clauses skip with a loud reason instead of failing to compile.
+	ServeOp func(r router.Router, name string, body []byte, userID string) Response
 }
 
 // Run executes every clause of the contract against the implementation.
@@ -120,6 +167,12 @@ func Run(t *testing.T, f Factory) {
 
 	t.Run("body_survives_binary_roundtrip", func(t *testing.T) { bodySurvivesBinaryRoundtrip(t, f) })
 	t.Run("body_is_stable_across_reads", func(t *testing.T) { bodyIsStableAcrossReads(t, f) })
+
+	t.Run("context_decodes_and_encodes_typed_payload", func(t *testing.T) { contextDecodesAndEncodesTypedPayload(t, f) })
+
+	t.Run("op_route_reports_args_schema", func(t *testing.T) { opRouteReportsArgsSchema(t, f) })
+	t.Run("op_route_is_invoked_by_name", func(t *testing.T) { opRouteIsInvokedByName(t, f) })
+	t.Run("op_route_enforces_rbac", func(t *testing.T) { opRouteEnforcesRBAC(t, f) })
 
 	t.Run("contradictory_route_fails_at_startup", func(t *testing.T) { contradictoryRouteFailsAtStartup(t, f) })
 }
@@ -425,6 +478,90 @@ func bodyIsStableAcrossReads(t *testing.T, f Factory) {
 	}
 	if !sameBytes(got.Body, binaryBody) {
 		t.Errorf("the second read must return the same bytes: got %v, want %v", got.Body, binaryBody)
+	}
+}
+
+// contextDecodesAndEncodesTypedPayload: the handler reads args and writes its result through
+// the transport's typed codec (Decode/Encode) — never a hand-rolled json.Decode in the module.
+// Context is byte-oriented (Body/Write), so the fixture travels as the JSON every deployed
+// transport already carries on that wire; what is under test is that Decode/Encode round-trip
+// through it, not that the suite can parse bytes.
+func contextDecodesAndEncodesTypedPayload(t *testing.T, f Factory) {
+	r, serve := build(t, f)
+
+	r.Put(testPath, func(ctx router.Context) {
+		var in echoPayload
+		if err := ctx.Decode(&in); err != nil {
+			ctx.WriteStatus(500)
+			return
+		}
+		ctx.WriteStatus(200)
+		if err := ctx.Encode(&in); err != nil {
+			ctx.WriteStatus(500)
+		}
+	}).Public()
+
+	got := serve("PUT", testPath, []byte(echoPayloadJSON), Anonymous)
+	if got.Status != 200 {
+		t.Fatalf("Decode/Encode round-trip failed: status %d, body %s", got.Status, got.Body)
+	}
+	if v := extractEchoValue(got.Body); v != "conformance" {
+		t.Errorf("Decode/Encode did not round-trip the typed value: got %q, want %q (body: %s)", v, "conformance", got.Body)
+	}
+}
+
+// --- op: provider-side dispatch by logical name -----------------------------------------
+
+// opRouteReportsArgsSchema: Accepts is the counterpart of RouteInfo.Args — a transport that
+// needs a schema (mcp's tools/list) reads it from Routes(), never from a module hand-rolling
+// wire metadata. Pure introspection: no ServeOp needed.
+func opRouteReportsArgsSchema(t *testing.T, f Factory) {
+	r, _ := build(t, f)
+
+	args := &echoPayload{}
+	r.Op("with_args", ok("op")).Public().Accepts(args)
+
+	infos := r.Routes()
+	for _, i := range infos {
+		if i.Args == args {
+			return
+		}
+	}
+	t.Errorf("Routes() must report the Args declared via Accepts for an Op route, got: %+v", infos)
+}
+
+// opRouteIsInvokedByName: a module registers by NAME (Router.Op), never a path — the
+// provider-side symmetric to Caller.Call(name, args, cb). This is what lets one
+// router.APIModule serve both an HTTP transport and mcp without knowing either.
+func opRouteIsInvokedByName(t *testing.T, f Factory) {
+	if f.ServeOp == nil {
+		t.Skip("implementation does not support Op yet")
+	}
+	r, _ := build(t, f)
+
+	r.Op("do_thing", ok("op-ran")).Public()
+
+	got := f.ServeOp(r, "do_thing", nil, Anonymous)
+	if got.Status != 200 || string(got.Body) != "op-ran" {
+		t.Errorf("Op route was not invoked by name: got %d %q", got.Status, got.Body)
+	}
+}
+
+// opRouteEnforcesRBAC: an Op route is a route — the SAME access gate applies. A module that
+// switches from Post(path,...) to Op(name,...) must not silently lose its RBAC.
+func opRouteEnforcesRBAC(t *testing.T, f Factory) {
+	if f.ServeOp == nil {
+		t.Skip("implementation does not support Op yet")
+	}
+	r, _ := build(t, f)
+
+	r.Op("guarded_thing", ok("op-ran")).Requires(Resource, Action)
+
+	if got := f.ServeOp(r, "guarded_thing", nil, Anonymous); got.Status != 403 {
+		t.Errorf("a guarded Op route rejects an anonymous caller with 403, got %d", got.Status)
+	}
+	if got := f.ServeOp(r, "guarded_thing", nil, UserAuthorized); got.Status != 200 {
+		t.Errorf("a guarded Op route serves an identity the authorizer grants: got %d, want 200", got.Status)
 	}
 }
 

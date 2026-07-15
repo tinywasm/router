@@ -135,6 +135,21 @@ func (r *Router) Options(path string, h router.HandlerFunc) router.Route {
 	return route
 }
 
+// Op registers a route by logical operation name — the provider-side counterpart of
+// Caller.Call(name, args, cb). Internally it reuses the same method+path matching as
+// every other verb, under the synthetic method "OP" and path "/"+name: an implementation
+// detail this mock owns, invisible to a caller that only uses Router.Op and Route.
+func (r *Router) Op(name string, h router.HandlerFunc) router.Route {
+	path := "/" + name
+	route := r.registerRoute("OP", path)
+	r.ensureHandlers()
+	if r.handlers["OP"] == nil {
+		r.handlers["OP"] = make(map[string]router.HandlerFunc)
+	}
+	r.handlers["OP"][path] = h
+	return route
+}
+
 func (r *Router) Handle(method, path string, h router.HandlerFunc) router.Route {
 	route := r.registerRoute(method, path)
 	r.ensureHandlers()

@@ -23,6 +23,13 @@ type Route interface {
 
 	// Public marks the route as reachable with no identity at all.
 	Public() Route
+
+	// Accepts declares the typed schema of the request body — the Args a caller
+	// must send. It is the counterpart of RouteInfo.Args: a transport that needs
+	// to advertise a schema (mcp's tools/list) reads it from here instead of the
+	// module hand-rolling wire metadata. nil means "no args" (a Route that never
+	// calls Accepts has Args == nil, the same as passing nil explicitly).
+	Accepts(args model.Fielder) Route
 }
 
 // RouteInfo is the read-only view of a registered route — for introspection.
@@ -43,6 +50,12 @@ type RouteInfo struct {
 	// It exists so a whole served directory is visible to introspection instead of
 	// being smuggled past the router by a file-server fallback.
 	Dir string
+	// Args is the schema a caller must send, set via Route.Accepts; nil = no args.
+	// It is a Go-side value read directly by a transport that needs it (mcp builds
+	// its tools/list schema from it) — deliberately NOT part of EncodeFields: a
+	// Fielder's schema is a different shape of data than this route-metadata wire
+	// view, and serializing it is that transport's concern, not RouteInfo's.
+	Args model.Fielder
 }
 
 // IsPublic reports whether the route is reachable with no identity.

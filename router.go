@@ -22,12 +22,21 @@ type Context interface {
 	SetValue(key string, v any)
 	Value(key string) any
 	// Isomorphic cookies.
-	SetCookie(c Cookie)             // writes a cookie to the response
+	SetCookie(c Cookie)                // writes a cookie to the response
 	Cookie(name string) (Cookie, bool) // reads a cookie from the request; ok=false if not found
 	// Request-scoped identity. An auth middleware records the caller;
 	// handlers and mounted modules read it.
 	SetUserID(id string) // records the authenticated identity (id "" = anonymous)
 	UserID() string      // reads the identity; "" if no valid session
+
+	// Decode reads the request body through the transport's codec, into a typed
+	// destination — the handler never imports a codec package directly. Decode
+	// backed by JSON, jsvalue, or any other model.FieldReader implementation is
+	// the transport's decision, not the handler's.
+	Decode(into model.Decodable) error
+	// Encode writes v through the transport's codec as the response body.
+	// Same contract as Decode, the other direction.
+	Encode(v model.Encodable) error
 }
 
 // HandlerFunc is the dispatch unit: receives a Context and responds to it.
@@ -74,6 +83,16 @@ type Router interface {
 	Handle(method, path string, h HandlerFunc) Route
 	Stream(path string, h StreamFunc) Route
 	Socket(path string, h SocketFunc) Route
+
+	// Op registers a route by LOGICAL OPERATION NAME instead of method+path — the
+	// provider side symmetric to Caller.Call(name, args, cb). A domain module names
+	// its operations ("upsert_catalog_item") without choosing an HTTP verb or path;
+	// each transport maps the name its own way:
+	//   - server/httpd maps it to POST {mount-prefix}/{name}.
+	//   - mcp harvests it as a tool named {name}, with Route.Accepts as its schema.
+	// This is what lets ONE router.APIModule implementation serve both transports —
+	// a module written against Op never imports mcp or json.
+	Op(name string, h HandlerFunc) Route
 
 	// PublicAsset registers ONE route serving ONE file to the browser: generated
 	// content such as index.html, the stylesheet, the JS bundle or the wasm binary.

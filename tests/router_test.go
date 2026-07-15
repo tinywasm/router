@@ -47,8 +47,10 @@ func (f *fakeContext) Cookie(name string) (router.Cookie, bool) {
 	c, ok := f.cookies[name]
 	return c, ok
 }
-func (f *fakeContext) SetUserID(id string) { f.userID = id }
-func (f *fakeContext) UserID() string      { return f.userID }
+func (f *fakeContext) SetUserID(id string)               { f.userID = id }
+func (f *fakeContext) UserID() string                    { return f.userID }
+func (f *fakeContext) Decode(into model.Decodable) error { return nil }
+func (f *fakeContext) Encode(v model.Encodable) error    { return nil }
 
 var _ router.Context = (*fakeContext)(nil)
 
@@ -135,6 +137,12 @@ func (f *fakeRouter) Socket(path string, h router.SocketFunc) router.Route {
 	return f.registerRoute("GET", path)
 }
 
+func (f *fakeRouter) Op(name string, h router.HandlerFunc) router.Route {
+	r := f.registerRoute("OP", "/"+name)
+	f.routes["/"+name] = h
+	return r
+}
+
 func (f *fakeRouter) Use(m ...router.Middleware) {
 }
 
@@ -166,12 +174,17 @@ func (r *fakeRoute) Public() router.Route {
 	return r
 }
 
+func (r *fakeRoute) Accepts(args model.Fielder) router.Route {
+	r.info.Args = args
+	return r
+}
+
 var _ router.Route = (*fakeRoute)(nil)
 
 // fakeModule prueba que APIModule embebe ModuleNaming sin tocar tipos de transporte.
 type fakeModule struct{ name string }
 
-func (f fakeModule) ModelName() string { return f.name }
+func (f fakeModule) ModelName() string        { return f.name }
 func (f fakeModule) MountAPI(r router.Router) {}
 
 var _ model.ModuleNaming = fakeModule{}

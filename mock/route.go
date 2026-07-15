@@ -27,4 +27,9 @@ func (r *Route) Public() router.Route {
 	return r
 }
 
+func (r *Route) Accepts(args model.Fielder) router.Route {
+	r.info.Args = args
+	return r
+}
+
 var _ router.Route = (*Route)(nil)
