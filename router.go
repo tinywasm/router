@@ -84,16 +84,6 @@ type Router interface {
 	Stream(path string, h StreamFunc) Route
 	Socket(path string, h SocketFunc) Route
 
-	// Op registers a route by LOGICAL OPERATION NAME instead of method+path — the
-	// provider side symmetric to Caller.Call(name, args, cb). A domain module names
-	// its operations ("upsert_catalog_item") without choosing an HTTP verb or path;
-	// each transport maps the name its own way:
-	//   - server/httpd maps it to POST {mount-prefix}/{name}.
-	//   - mcp harvests it as a tool named {name}, with Route.Accepts as its schema.
-	// This is what lets ONE router.APIModule implementation serve both transports —
-	// a module written against Op never imports mcp or json.
-	Op(name string, h HandlerFunc) Route
-
 	// PublicAsset registers ONE route serving ONE file to the browser: generated
 	// content such as index.html, the stylesheet, the JS bundle or the wasm binary.
 	//
@@ -121,4 +111,36 @@ type Router interface {
 type APIModule interface {
 	model.ModuleNaming // provides ModelName() — identity
 	MountAPI(r Router)
+}
+
+// OpRegistry is the transport-neutral surface a reusable domain module registers its
+// operations on. It carries ONLY named operations — no HTTP verb, no path — so one
+// module description projects onto whatever transport the host binds: mcp harvests
+// each Op as a tool; a future REST/gRPC/stdio binding would map the name its own way.
+//
+// It is the mount-side MIRROR of Caller (the call-side, also transport-neutral):
+// Caller.Call(name, args, into, done) invokes exactly what Op(name, h) registered.
+// Both live here, next to Context and Route, because that is what an Op handler needs.
+//
+// It is deliberately NOT a method on Router. Router is the HTTP-shaped surface
+// (Get/Post/path/cookies/status); a transport that only harvests operations (mcp)
+// must never be forced to impersonate an HTTP router — panicking on Get/Post it can
+// neither honour nor need — just to be handed the operation list. A concrete HTTP
+// router MAY also satisfy OpRegistry, but the domain module sees only this.
+type OpRegistry interface {
+	// Op registers an operation by LOGICAL NAME. Route.Accepts declares its arg schema
+	// (what a transport advertising a catalogue, like mcp's tools/list, reads); the
+	// same Route.Requires/Public/Authenticated gate applies as to any HTTP route.
+	Op(name string, h HandlerFunc) Route
+}
+
+// OpModule is a reusable domain module: it exposes named operations and NOTHING
+// transport-specific. Where APIModule registers HTTP routes and is therefore bound to
+// an HTTP host, an OpModule depends only on this package's neutral contracts, so the
+// SAME module serves any transport the composition root chooses to bind (mcp tools
+// today). "Is this module transport-agnostic?" is a compile-time fact — whether it
+// satisfies OpModule — not a convention to remember.
+type OpModule interface {
+	model.ModuleNaming // provides ModelName() — identity
+	MountOps(reg OpRegistry)
 }

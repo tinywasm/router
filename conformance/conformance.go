@@ -132,7 +132,7 @@ type Factory struct {
 	// contradiction case skips with a loud reason instead of passing quietly.
 	Verify func(r router.Router) error
 
-	// ServeOp drives ONE request through a route registered via Router.Op(name, h) — the
+	// ServeOp drives ONE request through a route registered via OpRegistry.Op(name, h) — the
 	// provider-side counterpart of router.Caller.Call(name, args, cb). It receives the SAME
 	// Router New built, so registration (by the clause) and invocation (by this func) share
 	// one instance; name is the op name the clause registered.
@@ -512,6 +512,18 @@ func contextDecodesAndEncodesTypedPayload(t *testing.T, f Factory) {
 
 // --- op: provider-side dispatch by logical name -----------------------------------------
 
+// opReg asserts the OpRegistry surface off the Router the Factory built. Op is NOT a
+// method on Router (that would force an op-only transport like mcp to impersonate an
+// HTTP router); a concrete HTTP router MAY also satisfy OpRegistry, and these clauses
+// skip loudly if it does not.
+func opReg(t *testing.T, r router.Router) router.OpRegistry {
+	reg, isOp := r.(router.OpRegistry)
+	if !isOp {
+		t.Skip("router does not implement OpRegistry")
+	}
+	return reg
+}
+
 // opRouteReportsArgsSchema: Accepts is the counterpart of RouteInfo.Args — a transport that
 // needs a schema (mcp's tools/list) reads it from Routes(), never from a module hand-rolling
 // wire metadata. Pure introspection: no ServeOp needed.
@@ -519,7 +531,7 @@ func opRouteReportsArgsSchema(t *testing.T, f Factory) {
 	r, _ := build(t, f)
 
 	args := &echoPayload{}
-	r.Op("with_args", ok("op")).Public().Accepts(args)
+	opReg(t, r).Op("with_args", ok("op")).Public().Accepts(args)
 
 	infos := r.Routes()
 	for _, i := range infos {
@@ -530,16 +542,16 @@ func opRouteReportsArgsSchema(t *testing.T, f Factory) {
 	t.Errorf("Routes() must report the Args declared via Accepts for an Op route, got: %+v", infos)
 }
 
-// opRouteIsInvokedByName: a module registers by NAME (Router.Op), never a path — the
-// provider-side symmetric to Caller.Call(name, args, cb). This is what lets one
-// router.APIModule serve both an HTTP transport and mcp without knowing either.
+// opRouteIsInvokedByName: a module registers by NAME (OpRegistry.Op), never a path — the
+// provider-side symmetric to Caller.Call(name, args, into, done). This is what lets one
+// router.OpModule serve any transport (mcp tools today) without knowing it.
 func opRouteIsInvokedByName(t *testing.T, f Factory) {
 	if f.ServeOp == nil {
 		t.Skip("implementation does not support Op yet")
 	}
 	r, _ := build(t, f)
 
-	r.Op("do_thing", ok("op-ran")).Public()
+	opReg(t, r).Op("do_thing", ok("op-ran")).Public()
 
 	got := f.ServeOp(r, "do_thing", nil, Anonymous)
 	if got.Status != 200 || string(got.Body) != "op-ran" {
@@ -555,7 +567,7 @@ func opRouteEnforcesRBAC(t *testing.T, f Factory) {
 	}
 	r, _ := build(t, f)
 
-	r.Op("guarded_thing", ok("op-ran")).Requires(Resource, Action)
+	opReg(t, r).Op("guarded_thing", ok("op-ran")).Requires(Resource, Action)
 
 	if got := f.ServeOp(r, "guarded_thing", nil, Anonymous); got.Status != 403 {
 		t.Errorf("a guarded Op route rejects an anonymous caller with 403, got %d", got.Status)

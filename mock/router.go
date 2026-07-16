@@ -301,3 +301,4 @@ func (r *Router) Verify() error {
 }
 
 var _ router.Router = (*Router)(nil)
+var _ router.OpRegistry = (*Router)(nil)
