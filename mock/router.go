@@ -1,6 +1,8 @@
 package mock
 
 import (
+	"strings"
+
 	"github.com/tinywasm/fmt"
 	"github.com/tinywasm/model"
 	"github.com/tinywasm/router"
@@ -240,24 +242,60 @@ func (r *Router) gateAndServe(method, path string, ctx router.Context) {
 // any method — the contract allows it, so the mock must too.
 func (r *Router) match(method, path string) (*Route, router.HandlerFunc, int) {
 	pathExists := false
+	var best *Route
+	var bestHandler router.HandlerFunc
+
 	for _, route := range r.registered {
-		if route.info.Path != path {
+		if !patternMatches(route.info.Path, path) {
 			continue
 		}
 		pathExists = true
 		if route.info.Method != "" && route.info.Method != method {
 			continue
 		}
-		if handlers, ok := r.handlers[route.info.Method]; ok {
-			if h, ok := handlers[path]; ok {
-				return route, h, 200
-			}
+		if best != nil && len(route.info.Path) <= len(best.info.Path) {
+			continue
 		}
+		handlers, ok := r.handlers[route.info.Method]
+		if !ok {
+			continue
+		}
+		// La clave es el patrón registrado, no la ruta pedida: con subárboles
+		// dejan de ser lo mismo.
+		h, ok := handlers[route.info.Path]
+		if !ok {
+			continue
+		}
+		best, bestHandler = route, h
+	}
+
+	if best != nil {
+		return best, bestHandler, 200
 	}
 	if pathExists {
 		return nil, nil, 405
 	}
 	return nil, nil, 404
+}
+
+// patternMatches replica la regla de http.ServeMux, que es la que aplica la
+// implementación desplegada: server/httpd registra cada ruta como
+// "MÉTODO /ruta" en un mux, donde un patrón terminado en "/" cubre todo su
+// subárbol y el más largo gana.
+//
+// El mock comparaba rutas por igualdad exacta, así que no podía expresar un
+// activo comodín —el servidor de desarrollo sirve el sitio entero bajo "/"— y
+// un consumidor que lo probara contra este mock estaría afirmando un
+// comportamiento que producción no tiene.
+//
+// Diferencia consciente con ServeMux: este mock no redirige "/foo" a "/foo/".
+// Una redirección no es enrutado, y ningún consumidor del contrato depende de
+// ella.
+func patternMatches(pattern, path string) bool {
+	if strings.HasSuffix(pattern, "/") {
+		return strings.HasPrefix(path, pattern)
+	}
+	return pattern == path
 }
 
 // allows is the access gate. The zero value of Access is AccessGuarded: a route that

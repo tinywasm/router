@@ -151,6 +151,7 @@ func Run(t *testing.T, f Factory) {
 	t.Run("same_path_different_methods", func(t *testing.T) { samePathDifferentMethods(t, f) })
 	t.Run("unregistered_method_is_405", func(t *testing.T) { unregisteredMethodIs405(t, f) })
 	t.Run("unmatched_path_is_404", func(t *testing.T) { unmatchedPathIs404(t, f) })
+	t.Run("subtree_pattern_serves_descendants", func(t *testing.T) { subtreePatternServesDescendants(t, f) })
 
 	t.Run("undeclared_route_fails_at_startup", func(t *testing.T) { undeclaredRouteFailsAtStartup(t, f) })
 	t.Run("public_route_serves_anonymous", func(t *testing.T) { publicServesAnonymous(t, f) })
@@ -232,6 +233,40 @@ func unregisteredMethodIs405(t *testing.T, f Factory) {
 
 	if got := serve("POST", testPath, nil, Anonymous); got.Status != 405 {
 		t.Errorf("a method nobody registered on an existing path is 405, got %d", got.Status)
+	}
+}
+
+// subtreePatternServesDescendants: una ruta terminada en "/" cubre su subárbol, y
+// entre varias que encajan gana la más específica.
+//
+// El servidor de desarrollo del framework sirve el sitio entero bajo "/" y
+// resuelve cada petición contra su propio índice de activos: sin subárbol
+// tendría que registrar una ruta por archivo en el instante del arranque, que
+// es justo lo que congelaba el sitio en la foto previa al escaneo de módulos.
+//
+// Estaba sin cubrir, y las implementaciones divergieron en silencio: httpd lo
+// soportaba porque http.ServeMux lo trae de fábrica, y el mock comparaba rutas
+// por igualdad exacta. Un consumidor que probara contra el mock afirmaba un
+// comportamiento que producción no tenía, o al revés.
+func subtreePatternServesDescendants(t *testing.T, f Factory) {
+	r, serve := build(t, f)
+	r.Get("/", ok("subtree")).Public()
+	r.Get(testPath, ok("exact")).Public()
+
+	for _, c := range []struct{ path, want string }{
+		{"/", "subtree"},
+		{"/img/logo.svg", "subtree"},
+		{"/a/b/c/deep.txt", "subtree"},
+		{testPath, "exact"},
+	} {
+		got := serve("GET", c.path, nil, Anonymous)
+		if got.Status != 200 {
+			t.Errorf("%s debe resolverse: got %d", c.path, got.Status)
+			continue
+		}
+		if string(got.Body) != c.want {
+			t.Errorf("%s llegó al handler equivocado: got %q, want %q", c.path, got.Body, c.want)
+		}
 	}
 }
 
