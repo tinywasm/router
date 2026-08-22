@@ -6,4 +6,4 @@ require github.com/tinywasm/model v0.1.4
 
 require github.com/tinywasm/fmt v0.25.7
 
-require github.com/tinywasm/json v0.5.21
+require github.com/tinywasm/json v0.5.23
