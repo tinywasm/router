@@ -1,9 +1,6 @@
 package router
 
-import (
-	"github.com/tinywasm/json"
-	"github.com/tinywasm/model"
-)
+import "github.com/tinywasm/model"
 
 // Context is the minimal abstraction seen by a handler: request → response.
 // Same interface signature for both native (!wasm) and edge/wasm targets.
@@ -31,26 +28,15 @@ type Context interface {
 	// handlers and mounted modules read it.
 	SetUserID(id string) // records the authenticated identity (id "" = anonymous)
 	UserID() string      // reads the identity; "" if no valid session
-}
 
-// Decode reads the request body through JSON into a typed destination — the
-// handler never imports a codec package directly. It is a free function, not
-// a Context method, so the call resolves to the concrete type's DecodeFields
-// at compile time instead of going through an interface (which would force
-// every model that ever reaches a handler onto a boxed dispatch table).
-func Decode[T model.Decodable](c Context, into T) error {
-	return json.Decode(c.Body(), into)
-}
-
-// Encode writes v through JSON as the response body. Same contract and same
-// reason for being a free function as Decode.
-func Encode[T model.Encodable](c Context, v T) error {
-	var out []byte
-	if err := json.Encode(v, &out); err != nil {
-		return err
-	}
-	_, err := c.Write(out)
-	return err
+	// Decode reads the request body through the transport's codec, into a typed
+	// destination — the handler never imports a codec package directly. Decode
+	// backed by JSON, jsvalue, or any other model.FieldReader implementation is
+	// the transport's decision, not the handler's.
+	Decode(into model.Decodable) error
+	// Encode writes v through the transport's codec as the response body.
+	// Same contract as Decode, the other direction.
+	Encode(v model.Encodable) error
 }
 
 // HandlerFunc is the dispatch unit: receives a Context and responds to it.
