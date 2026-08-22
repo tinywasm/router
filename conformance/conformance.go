@@ -526,12 +526,12 @@ func contextDecodesAndEncodesTypedPayload(t *testing.T, f Factory) {
 
 	r.Put(testPath, func(ctx router.Context) {
 		var in echoPayload
-		if err := ctx.Decode(&in); err != nil {
+		if err := router.Decode(ctx, &in); err != nil {
 			ctx.WriteStatus(500)
 			return
 		}
 		ctx.WriteStatus(200)
-		if err := ctx.Encode(&in); err != nil {
+		if err := router.Encode(ctx, &in); err != nil {
 			ctx.WriteStatus(500)
 		}
 	}).Public()
