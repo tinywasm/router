@@ -19,8 +19,11 @@ type Context interface {
 	WriteStatus(code int)
 	Write(b []byte) (int, error)
 	// Request-scoped values (middleware passes data to the next handler).
-	SetValue(key string, v any)
-	Value(key string) any
+	// String-only: the edge/wasm implementation is backed by a fixed-size,
+	// string-only store (tinywasm/context) with no room for arbitrary types.
+	// A value that needs richer shape travels as JSON in one of these strings.
+	SetValue(key, value string)
+	Value(key string) string
 	// Isomorphic cookies.
 	SetCookie(c Cookie)                // writes a cookie to the response
 	Cookie(name string) (Cookie, bool) // reads a cookie from the request; ok=false if not found

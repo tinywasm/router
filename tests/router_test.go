@@ -10,7 +10,7 @@ import (
 // fakeContext prueba que cualquier tipo implementando Context se escribe guiado
 // por la interfaz — sin fallbacks a `net/http`.
 type fakeContext struct {
-	values  map[string]any
+	values  map[string]string
 	cookies map[string]router.Cookie
 	userID  string
 }
@@ -22,15 +22,15 @@ func (f *fakeContext) GetHeader(key string) string { return "" }
 func (f *fakeContext) SetHeader(key, value string) {}
 func (f *fakeContext) WriteStatus(code int)        {}
 func (f *fakeContext) Write(b []byte) (int, error) { return len(b), nil }
-func (f *fakeContext) SetValue(key string, v any) {
+func (f *fakeContext) SetValue(key, value string) {
 	if f.values == nil {
-		f.values = make(map[string]any)
+		f.values = make(map[string]string)
 	}
-	f.values[key] = v
+	f.values[key] = value
 }
-func (f *fakeContext) Value(key string) any {
+func (f *fakeContext) Value(key string) string {
 	if f.values == nil {
-		return nil
+		return ""
 	}
 	return f.values[key]
 }

@@ -23,7 +23,7 @@ type Context struct {
 	response bytes.Buffer
 	headers  map[string]string
 	cookies  map[string]router.Cookie
-	values   map[string]any
+	values   map[string]string
 	userID   string
 }
 
@@ -86,20 +86,20 @@ func (c *Context) Write(b []byte) (int, error) {
 	return c.response.Write(b)
 }
 
-func (c *Context) SetValue(key string, v any) {
+func (c *Context) SetValue(key, value string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.values == nil {
-		c.values = make(map[string]any)
+		c.values = make(map[string]string)
 	}
-	c.values[key] = v
+	c.values[key] = value
 }
 
-func (c *Context) Value(key string) any {
+func (c *Context) Value(key string) string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.values == nil {
-		return nil
+		return ""
 	}
 	return c.values[key]
 }
