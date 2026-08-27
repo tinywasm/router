@@ -34,6 +34,9 @@ func (f *fakeContext) Value(key string) string {
 	}
 	return f.values[key]
 }
+func (f *fakeContext) Param(name string) string {
+	return ""
+}
 func (f *fakeContext) SetCookie(c router.Cookie) {
 	if f.cookies == nil {
 		f.cookies = make(map[string]router.Cookie)

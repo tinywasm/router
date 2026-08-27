@@ -1,8 +1,6 @@
 package mock
 
 import (
-	"strings"
-
 	"github.com/tinywasm/fmt"
 	"github.com/tinywasm/model"
 	"github.com/tinywasm/router"
@@ -31,9 +29,9 @@ type Config struct {
 // fantasy — a guarded route "worked" in their tests and answered 403 in production. That is
 // not a hypothetical: it is how goflare shipped an unusable file API with a green suite.
 //
-// Guarda *Route, no RouteInfo: las anotaciones de permiso (Public/Requires) se
-// encadenan DESPUÉS de registrar la ruta, así que una copia por valor tomada en
-// el registro nunca las vería y el mock afirmaría que toda ruta es privada.
+// Stores *Route, not RouteInfo: permission annotations (Public/Requires) are chained
+// AFTER registering the route, so a copy by value taken at registration would never see
+// them and the mock would assert that every route is private.
 type Router struct {
 	cfg         Config
 	middlewares []router.Middleware
@@ -54,9 +52,12 @@ func (r *Router) ensureHandlers() {
 	}
 }
 
-// registerRoute crea la ruta SIN permisos: el recurso y la acción los pone Requires()
-// después, encadenado. Pasarlos aquí eran dos parámetros siempre vacíos.
+// registerRoute creates the route WITHOUT permissions: resource and action are set by
+// Requires() afterwards, chained. Passing them here were two parameters always empty.
 func (r *Router) registerRoute(method, path string) *Route {
+	if err := router.ValidatePattern(path); err != nil {
+		panic(err)
+	}
 	r.ensureHandlers()
 	route := &Route{
 		info: router.RouteInfo{
@@ -78,8 +79,8 @@ func (r *Router) Get(path string, h router.HandlerFunc) router.Route {
 	return route
 }
 
-// PublicAsset registra un archivo servido al navegador: público por construcción,
-// sin Route que devolver — no hay permiso que colgarle.
+// PublicAsset registers a file served to the browser: public by construction,
+// without Route to return — no permission to attach.
 func (r *Router) PublicAsset(path string, h router.HandlerFunc) {
 	route := r.registerRoute("GET", path)
 	route.info.Access = model.AccessPublic
@@ -90,7 +91,7 @@ func (r *Router) PublicAsset(path string, h router.HandlerFunc) {
 	r.handlers["GET"][path] = h
 }
 
-// PublicDir registra un directorio servido bajo un prefijo.
+// PublicDir registers a directory served under a prefix.
 func (r *Router) PublicDir(prefix string, dir string) {
 	route := r.registerRoute("GET", prefix)
 	route.info.Access = model.AccessPublic
@@ -188,8 +189,8 @@ func (r *Router) Use(m ...router.Middleware) {
 	r.middlewares = append(r.middlewares, m...)
 }
 
-// Routes proyecta las rutas registradas en el momento de la consulta, ya con sus
-// anotaciones de permiso aplicadas.
+// Routes projects the registered routes at query time, with their permission
+// annotations applied.
 func (r *Router) Routes() []router.RouteInfo {
 	out := make([]router.RouteInfo, 0, len(r.registered))
 	for _, route := range r.registered {
@@ -219,10 +220,15 @@ func (r *Router) Invoke(method, path string, ctx router.Context) {
 func (r *Router) gateAndServe(method, path string, ctx router.Context) {
 	r.ensureHandlers()
 
-	route, h, status := r.match(method, path)
+	route, h, paramValues, status := r.match(method, path)
 	if route == nil {
 		ctx.WriteStatus(status) // 404: no path matched — 405: the path exists, the method does not
 		return
+	}
+
+	if mockCtx, ok := ctx.(*Context); ok {
+		paramNames := router.ParamNames(route.info.Path)
+		mockCtx.SetParams(paramNames, paramValues)
 	}
 
 	if !r.allows(route.info, ctx.UserID()) {
@@ -238,64 +244,43 @@ func (r *Router) gateAndServe(method, path string, ctx router.Context) {
 	h(ctx)
 }
 
-// match finds the route for a method+path. A route registered with an empty method matches
-// any method — the contract allows it, so the mock must too.
-func (r *Router) match(method, path string) (*Route, router.HandlerFunc, int) {
+// match finds the route for a method+path using router.MatchPattern and router.MoreSpecific.
+func (r *Router) match(method, path string) (*Route, router.HandlerFunc, []string, int) {
 	pathExists := false
 	var best *Route
 	var bestHandler router.HandlerFunc
+	var bestVals []string
 
 	for _, route := range r.registered {
-		if !patternMatches(route.info.Path, path) {
+		vals, matched := router.MatchPattern(route.info.Path, path)
+		if !matched {
 			continue
 		}
 		pathExists = true
 		if route.info.Method != "" && route.info.Method != method {
 			continue
 		}
-		if best != nil && len(route.info.Path) <= len(best.info.Path) {
+		if best != nil && !router.MoreSpecific(route.info.Path, best.info.Path) {
 			continue
 		}
 		handlers, ok := r.handlers[route.info.Method]
 		if !ok {
 			continue
 		}
-		// La clave es el patrón registrado, no la ruta pedida: con subárboles
-		// dejan de ser lo mismo.
 		h, ok := handlers[route.info.Path]
 		if !ok {
 			continue
 		}
-		best, bestHandler = route, h
+		best, bestHandler, bestVals = route, h, vals
 	}
 
 	if best != nil {
-		return best, bestHandler, 200
+		return best, bestHandler, bestVals, 200
 	}
 	if pathExists {
-		return nil, nil, 405
+		return nil, nil, nil, 405
 	}
-	return nil, nil, 404
-}
-
-// patternMatches replica la regla de http.ServeMux, que es la que aplica la
-// implementación desplegada: server/httpd registra cada ruta como
-// "MÉTODO /ruta" en un mux, donde un patrón terminado en "/" cubre todo su
-// subárbol y el más largo gana.
-//
-// El mock comparaba rutas por igualdad exacta, así que no podía expresar un
-// activo comodín —el servidor de desarrollo sirve el sitio entero bajo "/"— y
-// un consumidor que lo probara contra este mock estaría afirmando un
-// comportamiento que producción no tiene.
-//
-// Diferencia consciente con ServeMux: este mock no redirige "/foo" a "/foo/".
-// Una redirección no es enrutado, y ningún consumidor del contrato depende de
-// ella.
-func patternMatches(pattern, path string) bool {
-	if strings.HasSuffix(pattern, "/") {
-		return strings.HasPrefix(path, pattern)
-	}
-	return pattern == path
+	return nil, nil, nil, 404
 }
 
 // allows is the access gate. The zero value of Access is AccessGuarded: a route that
