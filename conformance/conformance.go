@@ -175,6 +175,14 @@ func Run(t *testing.T, f Factory) {
 	t.Run("op_route_is_invoked_by_name", func(t *testing.T) { opRouteIsInvokedByName(t, f) })
 	t.Run("op_route_enforces_rbac", func(t *testing.T) { opRouteEnforcesRBAC(t, f) })
 
+	t.Run("path_parameter_is_extracted", func(t *testing.T) { pathParameterIsExtracted(t, f) })
+	t.Run("two_parameters_in_one_pattern", func(t *testing.T) { twoParametersInOnePattern(t, f) })
+	t.Run("parameter_does_not_match_across_a_separator", func(t *testing.T) { parameterDoesNotMatchAcrossSeparator(t, f) })
+	t.Run("parameter_does_not_match_an_empty_segment", func(t *testing.T) { parameterDoesNotMatchEmptySegment(t, f) })
+	t.Run("literal_beats_parameter", func(t *testing.T) { literalBeatsParameter(t, f) })
+	t.Run("unknown_parameter_reads_empty", func(t *testing.T) { unknownParameterReadsEmpty(t, f) })
+	t.Run("parameters_do_not_leak_into_value", func(t *testing.T) { parametersDoNotLeakIntoValue(t, f) })
+
 	t.Run("contradictory_route_fails_at_startup", func(t *testing.T) { contradictoryRouteFailsAtStartup(t, f) })
 }
 
@@ -609,6 +617,89 @@ func opRouteEnforcesRBAC(t *testing.T, f Factory) {
 	}
 	if got := f.ServeOp(r, "guarded_thing", nil, UserAuthorized); got.Status != 200 {
 		t.Errorf("a guarded Op route serves an identity the authorizer grants: got %d, want 200", got.Status)
+	}
+}
+
+// --- path parameters --------------------------------------------------------------------
+
+func pathParameterIsExtracted(t *testing.T, f Factory) {
+	r, serve := build(t, f)
+	r.Get("/api/items/{id}", func(ctx router.Context) {
+		ctx.WriteStatus(200)
+		ctx.Write([]byte(ctx.Param("id")))
+	}).Public()
+
+	got := serve("GET", "/api/items/42", nil, Anonymous)
+	if got.Status != 200 || string(got.Body) != "42" {
+		t.Errorf("path parameter was not extracted: got %d %q, want 200 %q", got.Status, got.Body, "42")
+	}
+}
+
+func twoParametersInOnePattern(t *testing.T, f Factory) {
+	r, serve := build(t, f)
+	r.Get("/api/sites/{site}/pages/{page}", func(ctx router.Context) {
+		ctx.WriteStatus(200)
+		ctx.Write([]byte(ctx.Param("site") + ":" + ctx.Param("page")))
+	}).Public()
+
+	got := serve("GET", "/api/sites/a/pages/b", nil, Anonymous)
+	if got.Status != 200 || string(got.Body) != "a:b" {
+		t.Errorf("two parameters in one pattern failed: got %d %q, want 200 %q", got.Status, got.Body, "a:b")
+	}
+}
+
+func parameterDoesNotMatchAcrossSeparator(t *testing.T, f Factory) {
+	r, serve := build(t, f)
+	r.Get("/api/items/{id}", ok("item")).Public()
+
+	if got := serve("GET", "/api/items/42/extra", nil, Anonymous); got.Status != 404 {
+		t.Errorf("parameter matched across a separator: got %d, want 404", got.Status)
+	}
+}
+
+func parameterDoesNotMatchEmptySegment(t *testing.T, f Factory) {
+	r, serve := build(t, f)
+	r.Get("/api/items/{id}", ok("item")).Public()
+
+	if got := serve("GET", "/api/items/", nil, Anonymous); got.Status != 404 {
+		t.Errorf("parameter matched an empty segment: got %d, want 404", got.Status)
+	}
+}
+
+func literalBeatsParameter(t *testing.T, f Factory) {
+	r, serve := build(t, f)
+	r.Get("/api/items/{id}", ok("param")).Public()
+	r.Get("/api/items/new", ok("literal")).Public()
+
+	got := serve("GET", "/api/items/new", nil, Anonymous)
+	if got.Status != 200 || string(got.Body) != "literal" {
+		t.Errorf("literal did not beat parameter: got %d %q, want 200 %q", got.Status, got.Body, "literal")
+	}
+}
+
+func unknownParameterReadsEmpty(t *testing.T, f Factory) {
+	r, serve := build(t, f)
+	r.Get("/api/items/{id}", func(ctx router.Context) {
+		ctx.WriteStatus(200)
+		ctx.Write([]byte(ctx.Param("nope")))
+	}).Public()
+
+	got := serve("GET", "/api/items/42", nil, Anonymous)
+	if got.Status != 200 || string(got.Body) != "" {
+		t.Errorf("unknown parameter did not read empty: got %d %q, want 200 %q", got.Status, got.Body, "")
+	}
+}
+
+func parametersDoNotLeakIntoValue(t *testing.T, f Factory) {
+	r, serve := build(t, f)
+	r.Get("/api/items/{id}", func(ctx router.Context) {
+		ctx.WriteStatus(200)
+		ctx.Write([]byte(ctx.Value("id")))
+	}).Public()
+
+	got := serve("GET", "/api/items/42", nil, Anonymous)
+	if got.Status != 200 || string(got.Body) != "" {
+		t.Errorf("parameter leaked into Context.Value: got %d %q, want 200 %q", got.Status, got.Body, "")
 	}
 }
 

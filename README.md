@@ -53,6 +53,27 @@ Modules and views depend on `Caller` to invoke server operations without knowing
 - **`Caller`**: call-side contract — how a client-side view invokes a named server operation
 - **`mock`**: subpackage with canonical test doubles (Router, Context, Route, Caller) — no `net/http`, WASM-safe
 
+## Path Parameters
+
+Routes use `{name}` syntax (matching Go 1.22+ `net/http.ServeMux`):
+
+```go
+r.Get("/api/sites/{id}", func(ctx router.Context) {
+    id := ctx.Param("id")
+    ctx.Write([]byte("site: " + id))
+}).Public()
+```
+
+- Each parameter `{name}` matches **one non-empty** path segment.
+- Parameter names must be non-empty and unique within the pattern.
+- Literal segments always take precedence over parameters (e.g., `/api/sites/new` beats `/api/sites/{id}`).
+- Wildcards such as `{name...}` are **not** supported and are rejected at registration.
+
+## Introspection
+
+Every router implementation shares a standard introspection endpoint returning the route table as JSON.
+See [docs/INTROSPECTION.md](docs/INTROSPECTION.md) for details.
+
 ## Op — transport-neutral operations, with a typed codec at the edge
 
 `OpRegistry.Op` is the mount-side counterpart of `Caller.Call(name, args, into, done)`: a domain

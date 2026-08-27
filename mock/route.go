@@ -5,7 +5,7 @@ import (
 	"github.com/tinywasm/router"
 )
 
-// Route implementa router.Route para el mock, grabando las anotaciones de permiso.
+// Route implements router.Route for the mock, recording permission annotations.
 type Route struct {
 	info router.RouteInfo
 }

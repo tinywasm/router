@@ -24,6 +24,15 @@ type Context interface {
 	// A value that needs richer shape travels as JSON in one of these strings.
 	SetValue(key, value string)
 	Value(key string) string
+
+	// Param returns the value of a path parameter the matched route declared
+	// with {name}. It returns "" when the route declares no such parameter —
+	// an absent parameter is not an error, it is a handler asking for
+	// something this route never had.
+	//
+	// Values are NOT decoded beyond the transport's own URL decoding, and they
+	// are never trusted: a parameter is caller input like any other.
+	Param(name string) string
 	// Isomorphic cookies.
 	SetCookie(c Cookie)                // writes a cookie to the response
 	Cookie(name string) (Cookie, bool) // reads a cookie from the request; ok=false if not found

@@ -38,6 +38,8 @@ Every public API must hold to these principles:
 autocomplete and a few-line example, the harness is closed. If it needs a manual to
 avoid mistakes, something is still untyped.
 
+- **Pattern validation:** Patterns are validated at registration (via `ValidatePattern`), never at request time.
+
 ---
 
 ## Scope — single responsibility

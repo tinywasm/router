@@ -35,7 +35,7 @@ type Route interface {
 // RouteInfo is the read-only view of a registered route — for introspection.
 type RouteInfo struct {
 	Method   string         // e.g. "GET", "POST"
-	Path     string         // e.g. "/api/users", "/api/orders/:id"
+	Path     string         // e.g. "/api/users", "/api/orders/{id}"
 	Resource model.Resource // required by AccessGuarded; must be empty otherwise
 	Action   model.Action   // e.g. model.Read; 0 = none
 	// Access is what the route declared. The ZERO VALUE is model.AccessGuarded: a route that

@@ -18,20 +18,22 @@ type Context struct {
 	InPath   string
 	InBody   []byte
 
-	Status   int
-	mu       sync.RWMutex
-	response bytes.Buffer
-	headers  map[string]string
-	cookies  map[string]router.Cookie
-	values   map[string]string
-	userID   string
+	Status      int
+	mu          sync.RWMutex
+	response    bytes.Buffer
+	headers     map[string]string
+	cookies     map[string]router.Cookie
+	values      map[string]string
+	paramNames  []string
+	paramValues []string
+	userID      string
 }
 
-// ResponseBody devuelve una copia del cuerpo de respuesta bufferizado.
+// ResponseBody returns a copy of the buffered response body.
 func (c *Context) ResponseBody() []byte {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	// Devuelve una copia para evitar races con escrituras posteriores.
+	// Returns a copy to avoid race conditions with subsequent writes.
 	src := c.response.Bytes()
 	dst := make([]byte, len(src))
 	copy(dst, src)
@@ -102,6 +104,24 @@ func (c *Context) Value(key string) string {
 		return ""
 	}
 	return c.values[key]
+}
+
+func (c *Context) SetParams(names, values []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.paramNames = names
+	c.paramValues = values
+}
+
+func (c *Context) Param(name string) string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for i, n := range c.paramNames {
+		if n == name && i < len(c.paramValues) {
+			return c.paramValues[i]
+		}
+	}
+	return ""
 }
 
 func (c *Context) SetCookie(cookie router.Cookie) {
