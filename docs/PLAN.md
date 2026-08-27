@@ -2,6 +2,8 @@
 PLAN: "feat: path parameters and a router-owned introspection endpoint"
 EXECUTOR: jules
 REVIEWER: none
+STATUS: running
+SESSION: 14506525275357653895
 ---
 
 > This plan is dispatched via the CodeJob workflow. See skill: agents-workflow.
