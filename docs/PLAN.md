@@ -2,6 +2,8 @@
 PLAN: "feat(query): add router.QueryParam, the single correct query-string parser"
 EXECUTOR: jules
 REVIEWER: none
+STATUS: running
+SESSION: 4799779376600479517
 ---
 
 > Este plan se despacha con el flujo CodeJob. Ver skill: `agents-workflow`.
