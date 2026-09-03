@@ -69,6 +69,23 @@ r.Get("/api/sites/{id}", func(ctx router.Context) {
 - Literal segments always take precedence over parameters (e.g., `/api/sites/new` beats `/api/sites/{id}`).
 - Wildcards such as `{name...}` are **not** supported and are rejected at registration.
 
+## Query String Parameters
+
+Query string parsing is provided via package-level helper functions `QueryParam` and `QueryUnescape`:
+
+```go
+r.Get("/oauth/callback", func(ctx router.Context) {
+    code, ok := router.QueryParam(ctx.Path(), "code")
+    if !ok {
+        ctx.WriteStatus(400)
+        return
+    }
+    // ...
+})
+```
+
+`QueryParam` and `QueryUnescape` are package-level functions rather than `Context` methods because `Context.Path()` already provides the full path (including any query string), and query parsing is transport-independent—avoiding unnecessary additions to the `Context` interface that would break existing implementations.
+
 ## Introspection
 
 Every router implementation shares a standard introspection endpoint returning the route table as JSON.
